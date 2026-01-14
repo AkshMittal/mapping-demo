@@ -1,0 +1,140 @@
+html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    overflow: hidden; 
+    font-family: 'Inter', sans-serif;
+    box-sizing: border-box;
+
+}
+#main {
+    display: flex;
+    flex-direction: row;
+    height: 100vh;
+    gap: 10px;
+    /* background-color: black; */
+    box-sizing: border-box;
+    overflow-y: hidden;
+}
+
+#content {
+    flex: 3 1 0;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    gap: 20px;
+    padding:10px;
+    box-sizing: border-box;
+    overflow-y: hidden;
+}
+#map {
+    flex: 2 1 0;
+    min-height: 0;
+    height: 100%;
+    position: relative;
+    z-index: 5;
+    border-radius: 10px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.325);
+}
+#elevationChartContainer {
+    flex: 0.5 1 0;
+    min-height: 0;
+    height: 100%;
+    border-radius: 10px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.325);
+    background: #f2efe9;
+    padding: 5px;
+    overflow: hidden;
+}
+#metricsContainer {
+    flex: 1 1 0;
+    height: 100%;
+    padding:10px;
+    box-sizing: border-box;
+    overflow-y: hidden;
+}
+#metrics {
+    flex: 1 1 0;
+    min-height: 0;
+    height: 100%;
+    border-radius: 10px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.325);
+    background: #fff;
+    padding: 50px 20px;
+    overflow-y: hidden;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    background: #f2efe9;
+    font-family: sans-serif;
+    box-sizing: border-box;
+}
+
+.metric-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid #d1d1d1;
+}
+.metric-label {
+    font-size: 20px;
+    color: #555;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+.metric-value {
+    display: flex;
+    flex-direction: row ;
+    align-items: baseline;
+}
+.metric-number {
+    font-size: 18px;
+    font-weight: 600;
+    color: #111;
+}
+
+.metric-unit {
+    font-size: 14px;
+    font-weight: 600;
+    color: #797979;
+    margin-left: 4px;
+}
+
+@media (max-width: 850px) {
+
+
+    #main {
+        overflow: visible;
+        flex-direction: column;
+    }
+
+    #content {
+        flex:3 1 0;
+        flex-direction: column;
+        height: auto;
+        overflow: visible;
+        padding-bottom: 0;
+       
+    }
+    #map {
+        flex: 3 1 0;
+    }
+    #elevationChartContainer {
+        flex: 1.5 1 0;
+    }
+    #metricsContainer {
+        flex: 0.5 1 0;
+        padding: 0 10px 20px 10px;
+        overflow-y: visible;
+    }
+    #metrics {
+        padding: 20px 10px;
+
+    }
+    .metric-row:last-child {
+        border-bottom: none;
+    }
+    
+
+}    
