@@ -78,7 +78,7 @@ export function drawElevationChart(distanceData, elevationData, routeData) {
                     min: 0,
                     max: Math.max(...distanceData),
                     ticks: {
-                        callback: v => v.toFixed(1) + 'km'
+                        callback: v => v.toFixed(1) + ' km'
                     },
                     title: { display: true, text: 'Distance (km)' }
                 },

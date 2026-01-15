@@ -62,6 +62,19 @@ function findTrkpts(doc) {
     return [];
 }
 
+function pickWindowSize(N) {
+    let windowsize;
+
+    if (N < 500) windowsize = 5;
+    else if (N < 1500) windowsize = 7;
+    else if (N < 6000) windowsize = 12;
+    else if (N < 10000) windowsize = 14;
+    else windowsize = 16;
+
+    return windowsize;
+} 
+
+
 function processPointsAndAttach(points, layer) {
     if (!points || points.length === 0) {
         console.warn('No track points to process.');
@@ -103,39 +116,32 @@ function processPointsAndAttach(points, layer) {
     layer.totalDistanceKm = totalDistanceKm;
 
     console.log('Route processed — points:', points.length, 'total km:', totalDistanceKm.toFixed(3));
-
+    let window = pickWindowSize(routeData.length);
+    const smoothedData = smoothData(routeData, window);
     try {
-        drawElevationChart(distanceData, elevationData, routeData);
+        drawSmoothedPolyline(map, smoothedData);
+    } catch (err) {
+        console.error('Failed to draw smoothed polyline:', err);
+    }
+    try {
+        drawElevationChart(distanceData, elevationData, smoothedData);
     } catch (err) {
         console.error('Failed to draw elevation graph:', err);
     }
-    let metrics = computeMetrics(routeData);
-    document.getElementById('metric-distance').textContent = metrics.totalDistanceKm;
-    document.getElementById('metric-ascent').textContent = metrics.totalAscent;
-    document.getElementById('metric-maxele').textContent = metrics.maxEle;
-    document.getElementById('metric-minele').textContent = metrics.minEle;
+    try {
+        computeMetrics(smoothedData);
+    } catch (err) {
+        console.error('Failed to compute metrics:', err);
+    }
 
-    console.log('Route metrics:', metrics);
 }
 
-function computeMetrics(routeData) {
-    if (!routeData || routeData.length === 0) return null;
-
-    const N = routeData.length;
-    let window;
-
-    if (N < 500) window = 5;
-    else if (N < 1500) window = 7;
-    else if (N < 6000) window = 12;
-    else if (N < 10000) window = 14;
-    else window = 16; 
-
-    const smoothedEle = smoothElevation(routeData, window);
-
+function computeMetrics(smoothData) {
+    if (!smoothData || smoothData.length === 0) return null; 
 
     let totalAscent = 0;
-    for (let i = 1; i < smoothedEle.length; i++) {
-        const diff = smoothedEle[i] - smoothedEle[i - 1];
+    for (let i = 1; i < smoothData.length; i++) {
+        const diff = smoothData[i].ele - smoothData[i - 1].ele;
         if (diff > 0.5) totalAscent += diff; 
     }
 
@@ -150,33 +156,65 @@ function computeMetrics(routeData) {
         if (curr.ele < minEle) minEle = curr.ele;
     }
 
-    return {
-        totalDistanceKm: Number((routeData[routeData.length - 1].dist).toFixed(1)),
-        totalAscent: Math.round(totalAscent), 
-        maxEle: Math.round(maxEle),           
-        minEle: Math.round(minEle)            
-    };
+    document.getElementById('metric-distance').textContent = Number((routeData[routeData.length - 1].dist).toFixed(1));
+    document.getElementById('metric-ascent').textContent = Math.round(totalAscent);
+    document.getElementById('metric-maxele').textContent = Math.round(maxEle);
+    document.getElementById('metric-minele').textContent = Math.round(minEle);
 
 }
 
-function smoothElevation(routeData, window=5) {
-  const smoothed = [];
+function smoothData(routeData, window=5) {
+  const half = Math.floor(window/2);
+  const smoothedData = [];
+
   for (let i = 0; i < routeData.length; i++) {
-    let sum = 0, count = 0;
-    for (let j = i - Math.floor(window/2); j <= i + Math.floor(window/2); j++) {
+    let lat = 0, lon = 0, ele = 0, count = 0;
+
+    for (let j = i - half; j <= i + half; j++) {
       if (j >= 0 && j < routeData.length) {
-        sum += routeData[j].ele;
+        lat += routeData[j].lat2;
+        lon += routeData[j].lon2;
+        ele += routeData[j].ele;
         count++;
       }
     }
-    smoothed.push(sum / count);
+
+    smoothedData.push({
+      lat: lat / count,
+      lon: lon / count,
+      ele: ele / count,
+      dist: routeData[i].dist,   
+      // ill add the timestamp later when relevant  
+    });
   }
-  return smoothed;
+
+  return smoothedData;
 }
 
+function drawSmoothedPolyline(map, smoothData, options = {}) {
+    if (!smoothData || smoothData.length === 0) return null;
 
+    // default style
+    const style = Object.assign({
+        color: "#ff7700",
+        weight: 4,
+        opacity: 1,
+        smoothFactor: 1.0
+    }, options);
 
+    // convert to [lat, lon] pairs
+    const latlngs = smoothData.map(p => [p.lat, p.lon]);
 
+    // draw polyline
+    const line = L.polyline(latlngs, style).addTo(map);
+    const start = L.marker(latlngs[0], { icon: startIconLarge }).addTo(map);
+    const end   = L.marker(latlngs[latlngs.length - 1], { icon: endIconNormal }).addTo(map);
+
+    // fit bounds to route
+    map.fitBounds(latlngs);
+
+    return line; // return for manipulation if needed
+}
 
 
 export function loadGPX(gpxPath) { 
@@ -217,12 +255,15 @@ export function loadGPX(gpxPath) {
 
             return null;
         }
-        const polyline = findPolyline(e.target);
+        const rawPolyline = findPolyline(e.target);
 
-        if (!polyline) {
+        if (!rawPolyline) {
             console.error("No polyline found anywhere inside GPX layer.");
             console.log(e.target);
             return;
+        }
+        else {
+            map.removeLayer(rawPolyline);
         }
 
 
@@ -234,21 +275,6 @@ export function loadGPX(gpxPath) {
 
         const xmlOrString = e.target._gpx;
         const xmlDoc = (typeof xmlOrString === 'string') ? new DOMParser().parseFromString(xmlOrString, 'text/xml') : xmlOrString;
-    
-        function findNearestRoutePoint(latlng){
-            let minDist = Infinity;
-            let nearestIndex = 0;
-            for (let i = 0; i < routeData.length; i++) {
-                const p = routeData[i];
-                const d = map.distance(latlng, [p.lat2, p.lon2]); 
-                if (d < minDist) {
-                    minDist = d;
-                    nearestIndex = i;
-                }
-            }
-
-            return nearestIndex;
-        }
         
         let lastHoverTime = 0;
         const HOVER_INTERVAL = 16; 

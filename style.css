@@ -24,6 +24,7 @@ html, body {
     height: 100%;
     gap: 20px;
     padding:10px;
+    /* padding-right: 0px; */
     box-sizing: border-box;
     overflow-y: hidden;
 }
@@ -107,6 +108,8 @@ html, body {
     #main {
         overflow: visible;
         flex-direction: column;
+        gap:20px;
+
     }
 
     #content {
