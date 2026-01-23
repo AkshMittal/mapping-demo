@@ -145,7 +145,7 @@ function resumePlayback() {
     playStartTime = performance.now();
 
     requestAnimationFrame(playbackLoop);
-    console.log("playstartTime:",playStartTime,)
+    // console.log("playstartTime:",playStartTime,)
 }
 
 
@@ -193,7 +193,7 @@ function resetPlayback() {
 let counter = 0;
 function playbackLoop(now) {
     if (!getPlaying()) {
-        console.log("counter = ", counter);
+        // console.log("counter = ", counter);
         return;
     }
     const elapsed = (getPlaying() ? performance.now() - playStartTime : 0) + elapsedAccum;
@@ -211,7 +211,7 @@ function playbackLoop(now) {
 
     if (!p0 || !p1) {
         console.warn("Playback index invalid:", i0, i1, "N:", N);
-        console.log("counter = ", counter);
+        // console.log("counter = ", counter);
         setPlaying(false);
         return;
     }
@@ -257,7 +257,7 @@ function playbackLoop(now) {
         setPlaying(false);
         playbackState = PlaybackState.FINISHED;
         btnPlay.dataset.state = playbackState;
-        console.log("ye this second thing happened");
+        // console.log("ye this second thing happened");
     }
 }
 
@@ -328,7 +328,7 @@ function pauseForCamp(campIndex) {
     campPauseEngaged = true;
     setPlaying(false);
     lastSyncedIndex = campIndex;
-    console.log("campIndex:", campIndex, "playbackIndex:", getPlaybackIndex(), "hoverIndex:", getHoverIndex())
+    // console.log("campIndex:", campIndex, "playbackIndex:", getPlaybackIndex(), "hoverIndex:", getHoverIndex())
     
     // snap marker info
     const camp = smoothedData[campIndex];
@@ -500,7 +500,7 @@ function processPointsAndAttach(points, layer) {
         
     }
     
-    console.log('Route processed — points:', points.length);
+    // console.log('Route processed — points:', points.length);
     let window = pickWindowSize(routeData.length);
     smoothedData = smoothData(routeData, window);
     setSmoothedData(smoothedData);
@@ -802,8 +802,8 @@ export function loadGPX(gpxPath) {
                 const parsed = new DOMParser().parseFromString(text, 'text/xml');
                 trkpts = findTrkpts(parsed);
                 processPointsAndAttach(trkpts, e.target);
-                console.log("smoothedData length: ", smoothedData.length);
-                console.log("hovermapMarker: ", hoverMapMarker);   
+                // console.log("smoothedData length: ", smoothedData.length);
+                // console.log("hovermapMarker: ", hoverMapMarker);   
             }).catch(err => console.error('GPX fetch fallback failed:', err));
             return;
         }
