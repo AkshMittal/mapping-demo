@@ -1,6 +1,12 @@
+import { isMapPanning } 
+from "./map-module.js";
+import {HoverSource, setHoverIndex } 
+from "./controller-module.js";
 
 
-export function drawElevationChart(distanceData, elevationData, routeData) {
+
+
+export function drawElevationChart(smoothedData) {
     let canvas = document.getElementById('elevationChart');
     canvas.style.backgroundColor = "#f2efe9";
     if (!canvas) {
@@ -12,19 +18,16 @@ export function drawElevationChart(distanceData, elevationData, routeData) {
         return;
     }
 
-    if (!Array.isArray(distanceData) || distanceData.length === 0) distanceData = [0, 1, 2, 3];
-    if (!Array.isArray(elevationData) || elevationData.length === 0) elevationData = [100, 150, 120, 180];
-
     const ctx = canvas.getContext('2d');
     window.elevationChart = new Chart(ctx, {
         type: 'line',
         data: {
-            labels: routeData.map(function(p){
+            labels: smoothedData.map(function(p){
                 return p.dist.toFixed(2);
             }),       
             datasets: [{
                 label: 'Elevation (m)',
-                data: routeData.map(function(p){return p.ele}),
+                data: smoothedData.map(p => p.ele),
                 borderColor: '#14305F',
                 backgroundColor: '#3c92d85b',
                 fill: true,
@@ -36,38 +39,29 @@ export function drawElevationChart(distanceData, elevationData, routeData) {
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            interaction: { mode: 'nearest', intersect: false },
+            interaction: { mode: 'index', intersect: false },
+            onHover: function(event, activeElement) {
+                if(isMapPanning()){
+                    return;
+                }
+                if(!activeElement.length){
+                    return;
+                }
+                const index = activeElement[0].index;
+                setHoverIndex(index, HoverSource.CHART);
+            },
             plugins: {
                 legend: { display: false },
                 tooltip: {
                     callbacks: {
-                        label: function(context) {
-                            const idx = context.dataIndex;
-                            const elevs = context.dataset.data;
-                            const dists = (context.chart.data.labels || []).map(Number);
+                        label: ctx => {
+                            const p = smoothedData[ctx.dataIndex];
 
-                            const lines = [];
-                            const curElev = elevs[idx];
-                            lines.push(`Elevation: ${curElev == null ? 'n/a' : curElev.toFixed(0) + ' m'}`);
-
-                            let grad = null;
-                            if (idx > 0 && elevs[idx - 1] != null && !isNaN(dists[idx]) && !isNaN(dists[idx - 1])) {
-                                const deltaH = curElev - elevs[idx - 1];
-                                const deltaD = dists[idx] - dists[idx - 1]; // km
-                                if (deltaD !== 0) grad = deltaH / deltaD; // m per km
-                            } else if (idx < elevs.length - 1 && elevs[idx + 1] != null && !isNaN(dists[idx + 1]) && !isNaN(dists[idx])) {
-                                const deltaH = elevs[idx + 1] - curElev;
-                                const deltaD = dists[idx + 1] - dists[idx];
-                                if (deltaD !== 0) grad = deltaH / deltaD;
-                            }
-
-                            if (grad == null || !isFinite(grad)) {
-                                lines.push('Gradient: n/a');
-                            } else {
-                                const percent = grad / 10;
-                                lines.push(`Gradient: ${grad.toFixed(1)} m/km (${percent.toFixed(2)}%)`);
-                            }
-                            return lines;
+                            return [
+                                `Elevation: ${p.ele ?? 'n/a'} m`,
+                                `Slope: ${p.slope ?? 'n/a'}`,
+                                `Grade: ${p.grade ?? 'n/a'}%`
+                            ];
                         }
                     }
                 }
@@ -76,7 +70,7 @@ export function drawElevationChart(distanceData, elevationData, routeData) {
                 x: {
                     type: 'linear',
                     min: 0,
-                    max: Math.max(...distanceData),
+                    max: smoothedData[smoothedData.length - 1].dist,
                     ticks: {
                         callback: v => v.toFixed(1) + ' km'
                     },

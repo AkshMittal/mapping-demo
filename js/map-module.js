@@ -1,6 +1,11 @@
 export function getMap(){
     return map;
 }
+let isPanning = false;
+
+export function isMapPanning() {
+  return isPanning;
+}
 
 const map = L.map('map', {
     minZoom: 2.2,

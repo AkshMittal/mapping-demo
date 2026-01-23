@@ -1,11 +1,321 @@
-import { getMap } 
+import { getMap,isMapPanning } 
 from "./map-module.js";
 
 import { drawElevationChart } 
 from "./chart-module.js";
 
-let map = getMap();
-let routeData = [];     
+import {setPlaying, setHoverIndex, getHoverIndex, setHoverMapMarker, setSmoothedData, getPlaying, HoverSource} 
+from "./controller-module.js";
+
+import {setCamps, setCampIndices,getCampIndices, setDayBounds, getDayBounds, getDayForIndex,} 
+from "./itinerary-module.js";
+
+import {camps,trailhead} 
+from "../routes/hampta-pass/camps.js";
+
+let routeData = [];
+let smoothedData = [];
+let routeSegments = [];
+export function getRouteSegments() {
+    return routeSegments;
+}
+let hitboxLine = null;
+let lastHoverTime = 0;
+const HOVER_INTERVAL = 16; 
+
+//playback 
+const PlaybackState = {
+  IDLE: 'idle',
+  PLAYING: 'playing',
+  PAUSED: 'paused',
+  CAMP_PAUSE: 'camp_pause',
+  FINISHED: 'finished'
+};
+let playbackState = PlaybackState.IDLE;
+let playbackIndex = 0;
+function getPlaybackIndex() {
+    return playbackIndex;
+}  
+let playStartTime = null;
+let elapsedAccum = 0;
+let playDuration = 12000; // 12 seconds for full GPX
+let lastSyncedIndex = -1;
+let lastPausedCampIndex = null;
+let campPauseEngaged = false;
+export function clearCampPause(){
+    campPauseEngaged = false;  
+    lastPausedCampIndex = null; 
+}
+function isCampPauseEngaged(){
+    return campPauseEngaged;
+}
+let fractionalIndex = 0;
+function syncPlaybackToHover() {
+    const i = getHoverIndex();
+    if (typeof i !== "number" || i < 0) return;
+
+    playbackIndex = i;
+    fractionalIndex = i;
+    lastSyncedIndex = i;
+    const N = smoothedData.length;
+    elapsedAccum = (fractionalIndex / (N - 1)) * playDuration;
+}
+let btnReset =document.getElementById('btn-reset');
+btnReset.addEventListener("click", () => {
+    resetPlayback();
+});
+let btnPlay = document.getElementById('btn-play');
+btnPlay.addEventListener("click", () => {
+    if (playbackState === PlaybackState.FINISHED) return;
+    switch (playbackState) {
+    case PlaybackState.IDLE:
+      startPlayback();
+      btnPlay.dataset.state = playbackState;
+
+      break;
+
+    case PlaybackState.PLAYING:
+      pausePlayback();
+      btnPlay.dataset.state = playbackState;
+
+      break;
+    case PlaybackState.PAUSED:
+        startPlayback();
+        btnPlay.dataset.state = playbackState;
+    case PlaybackState.CAMP_PAUSE:
+      resumePlayback();
+      btnPlay.dataset.state = playbackState;
+
+      break;
+  }
+});
+
+
+function startPlayback() {
+    if (getPlaying()) return;
+    playbackState = PlaybackState.PLAYING;    
+    syncPlaybackToHover();      // handoff 
+
+    campPauseEngaged = false;
+    setPlaying(true);
+    
+    const chart = window.elevationChart;
+    if (chart) chart.canvas.classList.add("chart-disabled");
+    chart.options.plugins.tooltip.enabled = false;
+    chart.update('none');
+    playStartTime = performance.now();
+    hoverMapMarker.setStyle({ opacity: 1, fillOpacity: 1 });
+
+    requestAnimationFrame(playbackLoop);
+}
+
+function resumePlayback() {
+    if (getPlaying()) return;
+    playbackState = PlaybackState.PLAYING;
+
+    campPauseEngaged = false;
+    const N = smoothedData.length;
+    elapsedAccum = (playbackIndex / (N - 1))* playDuration;
+    const chart = window.elevationChart;
+    if (chart) chart.canvas.classList.add("chart-disabled");
+    chart.options.plugins.tooltip.enabled = false;
+    chart.update('none');
+    setPlaying(true);
+    playStartTime = performance.now();
+
+    requestAnimationFrame(playbackLoop);
+    console.log("playstartTime:",playStartTime,)
+}
+
+
+
+function pausePlayback() {
+    playbackState = PlaybackState.PAUSED;
+    if (!getPlaying()) return;
+    elapsedAccum += performance.now() - playStartTime;
+    setPlaying(false); 
+    // enable chart tooltip
+    const chart = window.elevationChart;
+    if (chart) {
+        chart.canvas.classList.remove("chart-disabled");
+        chart.options.plugins.tooltip.enabled = true;
+        chart.tooltip?.setActiveElements(
+            [{ datasetIndex: 0, index: getHoverIndex() }],
+            { x: 0, y: 0 }
+        );
+        chart.update();
+    }
+
+    
+    setHoverIndex(getPlaybackIndex(), HoverSource.PROGRAM);
+}
+
+function resetPlayback() {
+    playbackState = PlaybackState.IDLE;
+    btnPlay.dataset.state = playbackState; 
+    setPlaying(false);
+    const chart = window.elevationChart;
+    if (chart) {
+        chart.canvas.classList.remove("chart-disabled");
+    }
+    setHoverIndex(0, HoverSource.PROGRAM);
+    chart.tooltip?.setActiveElements(
+            [{ datasetIndex: 0, index: getHoverIndex() }],
+            { x: 0, y: 0 }
+        );
+    chart.update('none');
+    clearCampPause();
+    elapsedAccum = 0;
+    playStartTime = 0;
+    lastSyncedIndex = -1;
+}
+let counter = 0;
+function playbackLoop(now) {
+    if (!getPlaying()) {
+        console.log("counter = ", counter);
+        return;
+    }
+    const elapsed = (getPlaying() ? performance.now() - playStartTime : 0) + elapsedAccum;
+    const N = smoothedData.length;
+    const buffer = playDuration / (N - 1); // time per point
+    // clamp so we don't go out of bounds
+    fractionalIndex = elapsed / buffer;
+    const i0 = Math.floor(fractionalIndex);
+    playbackIndex = i0;
+
+    const i1 = Math.min(i0 + 1, N - 1);
+
+    const p0 = smoothedData[i0];
+    const p1 = smoothedData[i1];
+
+    if (!p0 || !p1) {
+        console.warn("Playback index invalid:", i0, i1, "N:", N);
+        console.log("counter = ", counter);
+        setPlaying(false);
+        return;
+    }
+
+    // how far between p0 and p1 are we?
+    const alpha = fractionalIndex - i0;  // 0 to <1
+
+    // --- LINEAR INTERPOLATION ---
+    const lat = p0.lat + (p1.lat - p0.lat) * alpha;
+    const lon = p0.lon + (p1.lon - p0.lon) * alpha;
+    // move marker smoothly
+    counter++;
+    hoverMapMarker.setLatLng([lat, lon]);
+    // RANGE-BASED CAMP DETECTION (no skips)
+    // console.log(
+    //     "loop:",
+    //     "frac", fractionalIndex.toFixed(2),
+    //     "i0", i0,
+    //     "playback", playbackIndex,
+    //     "lastSynced", lastSyncedIndex
+    // );
+
+    const hitCamp = getCampIndices().find(ci =>
+        Math.abs(ci - getPlaybackIndex()) <= 60 && ci !== lastPausedCampIndex
+    );
+
+
+    if (hitCamp !== undefined) {
+        lastPausedCampIndex = hitCamp;
+        pauseForCamp(hitCamp);
+        return;
+    }
+
+    lastSyncedIndex = i0;
+    if(playbackIndex !== lastPausedCampIndex){
+        setHoverIndex(getPlaybackIndex(),HoverSource.PROGRAM);
+    }
+    // continue or end
+    if (elapsed < playDuration) {
+        requestAnimationFrame(playbackLoop);
+    } else {
+        clearCampPause();
+        setPlaying(false);
+        playbackState = PlaybackState.FINISHED;
+        btnPlay.dataset.state = playbackState;
+        console.log("ye this second thing happened");
+    }
+}
+
+const campIcon = L.icon({
+    iconUrl: '../resources/images/camp-icon.png',
+    iconSize: [60, 60],
+    iconAnchor: [30, 30],
+    popupAnchor: [0, 0]
+});
+
+function applyCamps(smoothedData) {
+    const totalKm = camps[camps.length - 1].distKm;
+    const N = smoothedData.length;
+
+    let campIndices = camps.map(camp => {
+        const proportion = camp.distKm / totalKm;
+        const index = Math.round(proportion * (N - 1));
+        camp.index = index;
+        camp.lat = smoothedData[index].lat;
+        camp.lon = smoothedData[index].lon;
+        camp.ele = smoothedData[index].ele;
+        return index;
+    });
+
+    // Day bounds = [start, camp1, camp2, camp3, end]
+    let dayBounds = [0, ...campIndices];
+    setDayBounds(dayBounds);
+    setCampIndices(campIndices);
+}
+
+
+
+function renderCampMarkers(map) {
+  camps.forEach(c => {
+    const marker = L.marker([c.lat, c.lon], { icon: campIcon }).addTo(map);
+
+  });
+}
+function pauseForCamp(campIndex) {
+    playbackState = PlaybackState.CAMP_PAUSE;
+    campPauseEngaged = true;
+    setPlaying(false);
+    lastSyncedIndex = campIndex;
+    console.log("campIndex:", campIndex, "playbackIndex:", getPlaybackIndex(), "hoverIndex:", getHoverIndex())
+    
+    // snap marker info
+    const camp = smoothedData[campIndex];
+    if (camp) {
+        hoverMapMarker.setLatLng([camp.lat, camp.lon]);
+    }
+    const isLastCamp = campIndex === getCampIndices().at(-1);
+
+    if (isLastCamp) {
+        playbackState = PlaybackState.FINISHED;
+        btnPlay.dataset.state = playbackState;
+    }
+    setHoverIndex(campIndex, HoverSource.CAMP);
+    playbackIndex = campIndex;
+
+    const chart = window.elevationChart;
+    if (chart){
+        chart.canvas.classList.remove("chart-disabled");
+        chart.options.plugins.tooltip.enabled = true;
+        chart.tooltip?.setActiveElements(
+            [{ datasetIndex: 0, index: campIndex }],
+            { x: 0, y: 0 }
+        );
+        chart.update('none');
+    }
+}
+
+
+
+getMap().createPane("endMarkerPane");
+getMap().getPane("endMarkerPane").style.zIndex = 650;
+getMap().createPane('hoverMarkerPane');
+getMap().getPane('hoverMarkerPane').style.zIndex = 700;   
+getMap().createPane('hitboxLinePane');
+getMap().getPane('hitboxLinePane').style.zIndex = 600;
 
 const startIconLarge = L.icon({
     iconUrl: "https://unpkg.com/leaflet-gpx@1.7.0/pin-icon-start.png",
@@ -24,6 +334,19 @@ const endIconNormal = L.icon({
     shadowSize: [32, 32],
     pane: "endMarkerPane"
 });
+
+
+
+let hoverMapMarker = L.circleMarker([0, 0], {
+            radius: 6,
+            color: "#14305F",    
+            weight: 2,            
+            fillColor: "#FFA046", 
+            fillOpacity: 1,
+            pane: 'hoverMarkerPane'
+        }).addTo(getMap());
+hoverMapMarker.setStyle({opacity:0, fillOpacity:0});
+setHoverMapMarker(hoverMapMarker);
 
 
 function toRadians(deg){
@@ -80,12 +403,18 @@ function processPointsAndAttach(points, layer) {
         console.warn('No track points to process.');
         return;
     }
-    let totalDistanceKm = 0;
-    const distanceData = [0];
-    const elevationData = [];
+    const firstLat = parseFloat(points[0].getAttribute('lat'));
+    const firstLon = parseFloat(points[0].getAttribute('lon'));
+    const firstEleTag = points[0].getElementsByTagName('ele')[0] || points[0].getElementsByTagNameNS('*','ele')[0];
+    const firstEle = firstEleTag ? parseFloat(firstEleTag.textContent) : 0;
 
-    const firstEle = (points[0].getElementsByTagName('ele')[0] || points[0].getElementsByTagNameNS('*','ele')[0]);
-    elevationData.push(firstEle ? parseFloat(firstEle.textContent) : null);
+    routeData.push({
+        lat: firstLat,
+        lon: firstLon,
+        ele: firstEle,
+        dist: 0
+    });
+
 
     for (let i = 1; i < points.length; i++) {
         const prev = points[i - 1];
@@ -95,36 +424,45 @@ function processPointsAndAttach(points, layer) {
         const lat2 = parseFloat(curr.getAttribute('lat'));
         const lon2 = parseFloat(curr.getAttribute('lon'));
         const d = haversine(lat1, lon1, lat2, lon2); 
-        totalDistanceKm += d;
 
         const eleTag = curr.getElementsByTagName('ele')[0] || curr.getElementsByTagNameNS('*','ele')[0];
         const ele = eleTag ? parseFloat(eleTag.textContent) : 0;
         
         routeData.push({
-            lat2,
-            lon2,
+            lat: lat2,
+            lon: lon2,
             ele,
-            dist: totalDistanceKm
         });
         
-        distanceData.push(totalDistanceKm);
-        elevationData.push(ele);
     }
- 
-    layer.distanceData = distanceData;
-    layer.elevationData = elevationData;
-    layer.totalDistanceKm = totalDistanceKm;
-
-    console.log('Route processed — points:', points.length, 'total km:', totalDistanceKm.toFixed(3));
+    
+    console.log('Route processed — points:', points.length);
     let window = pickWindowSize(routeData.length);
-    const smoothedData = smoothData(routeData, window);
+    smoothedData = smoothData(routeData, window);
+    setSmoothedData(smoothedData);
+
+    applyCamps(smoothedData);
+    renderCampMarkers(getMap());
+
     try {
-        drawSmoothedPolyline(map, smoothedData);
+        drawSmoothedPolyline(getMap(), smoothedData);
     } catch (err) {
         console.error('Failed to draw smoothed polyline:', err);
     }
+    
+    hitboxLine.on('mousemove', function (evt) {
+        if (getPlaying()) return;
+        playbackState = PlaybackState.PAUSED;
+        const now = performance.now();
+        if (now - lastHoverTime < HOVER_INTERVAL) return; 
+        lastHoverTime = now;
+        if (!smoothedData.length || isMapPanning()) return;
+        let nearestIndex = findNearestRoutePoint(evt.latlng);
+        setHoverIndex(nearestIndex, HoverSource.MAP);
+    });
+    
     try {
-        drawElevationChart(distanceData, elevationData, smoothedData);
+        drawElevationChart(smoothedData);
     } catch (err) {
         console.error('Failed to draw elevation graph:', err);
     }
@@ -139,81 +477,188 @@ function processPointsAndAttach(points, layer) {
 function computeMetrics(smoothData) {
     if (!smoothData || smoothData.length === 0) return null; 
 
-    let totalAscent = 0;
+    let maxEle = smoothData[0].ele;
+    let minEle = smoothData[0].ele;
+
     for (let i = 1; i < smoothData.length; i++) {
-        const diff = smoothData[i].ele - smoothData[i - 1].ele;
-        if (diff > 0.5) totalAscent += diff; 
-    }
-
-    let maxEle = routeData[0].ele;
-    let minEle = routeData[0].ele;
-
-    for (let i = 1; i < routeData.length; i++) {
-        const prev = routeData[i - 1];
-        const curr = routeData[i];
+        const prev = smoothData[i - 1];
+        const curr = smoothData[i];
 
         if (curr.ele > maxEle) maxEle = curr.ele;
         if (curr.ele < minEle) minEle = curr.ele;
     }
 
-    document.getElementById('metric-distance').textContent = Number((routeData[routeData.length - 1].dist).toFixed(1));
-    document.getElementById('metric-ascent').textContent = Math.round(totalAscent);
+    document.getElementById('metric-distance').textContent = Number((smoothData[smoothData.length - 1].dist).toFixed(1));
+    document.getElementById('metric-ascent').textContent = Math.round(smoothData[smoothData.length - 1].ascent);
     document.getElementById('metric-maxele').textContent = Math.round(maxEle);
     document.getElementById('metric-minele').textContent = Math.round(minEle);
-
+    
 }
 
-function smoothData(routeData, window=5) {
-  const half = Math.floor(window/2);
-  const smoothedData = [];
+function smoothData(routeData, window = 5) {
+    const half = Math.floor(window/2);
+    const result = [];
+    let cumDist = 0;
+    let cumAscent = 0;
 
-  for (let i = 0; i < routeData.length; i++) {
-    let lat = 0, lon = 0, ele = 0, count = 0;
+    for (let i = 0; i < routeData.length; i++) {
+        let lat = 0, lon = 0, ele = 0, count = 0;
 
-    for (let j = i - half; j <= i + half; j++) {
-      if (j >= 0 && j < routeData.length) {
-        lat += routeData[j].lat2;
-        lon += routeData[j].lon2;
-        ele += routeData[j].ele;
-        count++;
-      }
+        for (let j = i - half; j <= i + half; j++) {
+            if (j >= 0 && j < routeData.length) {
+                lat += routeData[j].lat;
+                lon += routeData[j].lon;
+                ele += routeData[j].ele;
+                count++;
+            }
+        }
+        lat /= count;
+        lon /= count;
+        ele /= count;
+
+
+        // cumulative distance & ascent
+        if (i > 0) {
+            const d = haversine(result[i - 1].lat, result[i - 1].lon, lat, lon);
+            cumDist += d;
+
+            const elevDiff = ele - result[i - 1].ele;
+            if (elevDiff > 0.5) {
+                cumAscent += elevDiff;
+            }
+        }
+
+        result.push({
+            lat,
+            lon,
+            ele: ele.toFixed(0),
+            dist: cumDist,
+            ascent: cumAscent,
+            slope: null,   // placeholder for forward slope
+            grade: null
+        });
     }
 
-    smoothedData.push({
-      lat: lat / count,
-      lon: lon / count,
-      ele: ele / count,
-      dist: routeData[i].dist,   
-      // ill add the timestamp later when relevant  
-    });
-  }
+    // compute forward slopes (Option A)
+    for (let i = 0; i < result.length - 1; i++) {
+        const curr = result[i];
+        const next = result[i + 1];
+        const dDist = next.dist - curr.dist;
+        const dEle  = next.ele  - curr.ele;
 
-  return smoothedData;
+        if (dDist > 0) {
+            const slope = dEle / (dDist * 1000);
+
+            // quantize ONCE
+            curr.slope = Number(slope.toFixed(3));       // e.g. 0.123
+            curr.grade = Number((slope * 100).toFixed(1)); // e.g. 12.3
+        } else {
+            curr.slope = null;
+            curr.grade = null;
+        }
+
+    }
+
+    // last point gets no forward slope
+    result[result.length - 1].slope = null;
+    result[result.length - 1].grade = null;
+
+    return result;
 }
+
+export function highlightDaySegment(dayIndex) {
+    if (!routeSegments.length) return;
+
+    // Neutral state (e.g. paused at camp)
+    if (dayIndex === null) {
+        routeSegments.forEach(seg => {
+            seg.layer.setStyle({
+                opacity: 0.5,
+                weight: 3
+            });
+        });
+        return;
+    }
+
+    // Normal highlight behavior
+    routeSegments.forEach((seg, idx) => {
+        seg.layer.setStyle(
+            idx === dayIndex
+                ? { opacity: 1, weight: 5 }
+                : { opacity: 0.5, weight: 3 }
+        );
+    });
+}
+
 
 function drawSmoothedPolyline(map, smoothData, options = {}) {
     if (!smoothData || smoothData.length === 0) return null;
 
     // default style
-    const style = Object.assign({
+    const PolylineStyle = Object.assign({
         color: "#ff7700",
         weight: 4,
         opacity: 1,
-        smoothFactor: 1.0
+        smoothFactor: 1.0,
+        interactive: false,
     }, options);
 
+    const HitboxStyle = Object.assign({
+        color: "#000000",
+        weight: 15,
+        opacity: 0,
+        interactive: true,
+        pane: 'hitboxLinePane'
+    }, options);
     // convert to [lat, lon] pairs
     const latlngs = smoothData.map(p => [p.lat, p.lon]);
 
     // draw polyline
-    const line = L.polyline(latlngs, style).addTo(map);
+    const bounds = getDayBounds();   // e.g. [0, 532, 1140, 1802]
+    routeSegments = [];
+    for (let d = 0; d < bounds.length - 1; d++) {
+        const i0 = bounds[d];
+        const i1 = bounds[d+1];
+        const segLatLngs = latlngs.slice(i0, i1 + 1); // inclusive slice
+
+        const segLine = L.polyline(segLatLngs, {
+            color: "#ff7700",
+            weight: 4,
+            opacity: 0.3,        // default dim
+            smoothFactor: 1,
+            interactive: false,
+        }).addTo(map);
+
+        routeSegments.push({
+            layer: segLine,
+            i0,
+            i1
+        });
+    }
     const start = L.marker(latlngs[0], { icon: startIconLarge }).addTo(map);
     const end   = L.marker(latlngs[latlngs.length - 1], { icon: endIconNormal }).addTo(map);
 
+    // draw hitbox line 
+    hitboxLine = L.polyline(latlngs, HitboxStyle).addTo(map);
     // fit bounds to route
     map.fitBounds(latlngs);
 
-    return line; // return for manipulation if needed
+
+}
+
+function findNearestRoutePoint(latlng){
+    let minDist = Infinity;
+    let nearestIndex = 0;
+    for (let i = 0; i < smoothedData.length; i++) {
+        const p = smoothedData[i];
+        const d = getMap().distance(latlng, [p.lat, p.lon]); 
+        if (d < minDist) {
+            minDist = d;
+            nearestIndex = i;
+        }
+    }
+
+    return nearestIndex;
 }
 
 
@@ -227,12 +672,16 @@ export function loadGPX(gpxPath) {
         async: true,
         polyline_options: { color: "#ff7700ff", weight: 4, opacity: 1},
         marker_options: {
-            startIcon: startIconLarge,
-            endIcon: endIconNormal,
+            startIcon: '',
+            startIconUrl: '',
+            endIconUrl: '',
+            endIcon: '',
+            shadowUrl: ''
         }
 
     })
     .on('loaded', async function (e) {
+
         function findPolyline(layer) {
             if (layer instanceof L.Polyline) {
                 return layer;
@@ -263,22 +712,12 @@ export function loadGPX(gpxPath) {
             return;
         }
         else {
-            map.removeLayer(rawPolyline);
+            getMap().removeLayer(rawPolyline);
         }
 
 
-        const bounds = e.target.getBounds();
-        const targetZoom = map.getBoundsZoom(bounds);
-        const targetCenter = bounds.getCenter();
-        map.setView(targetCenter, targetZoom);
-          
-
         const xmlOrString = e.target._gpx;
         const xmlDoc = (typeof xmlOrString === 'string') ? new DOMParser().parseFromString(xmlOrString, 'text/xml') : xmlOrString;
-        
-        let lastHoverTime = 0;
-        const HOVER_INTERVAL = 16; 
-
 
         let trkpts = findTrkpts(xmlDoc);
         if (!trkpts || trkpts.length === 0) {
@@ -290,14 +729,21 @@ export function loadGPX(gpxPath) {
                 const parsed = new DOMParser().parseFromString(text, 'text/xml');
                 trkpts = findTrkpts(parsed);
                 processPointsAndAttach(trkpts, e.target);
+                console.log("smoothedData length: ", smoothedData.length);
+                console.log("hovermapMarker: ", hoverMapMarker);   
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        startPlayback();
+                    });
+                });
             }).catch(err => console.error('GPX fetch fallback failed:', err));
             return;
         }
-
-        processPointsAndAttach(trkpts, e.target);
-
+    
 
 
 
-    }).addTo(map);
+    }).addTo(getMap());
+    
+
 }

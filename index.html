@@ -12,12 +12,20 @@
 <body>
     <div id="main">
         <div id="content">
-            <div id="map"></div>
+            <div id="map">
+                <div id="playback-controls" style="position:absolute; bottom:12px; left:50%; transform:translateX(-50%); display:flex; gap:8px; padding:6px 10px; background:#ffffffcc; border-radius:6px;">
+                    <button id="btn-play" class="button">Play</button>
+                    <button id="btn-reset" class="button">Reset</button>
+                </div>
+
+            </div>
             <div id="elevationChartContainer">
                 <canvas id="elevationChart"></canvas>
             </div>
         </div>
-        <div id="metricsContainer">
+        <div id="day-panel"></div>
+        <div id="camp-panel"></div>
+        <div id="metrics-panel">
             <div id="metrics">
                 <div class="metric-row">
                     <span class="metric-label">Distance</span>
