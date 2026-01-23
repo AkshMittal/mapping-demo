@@ -3,10 +3,12 @@ commercial DEMO inclusions and tradeoffs
 - handpicked gpx
 - maybe smoothed 
 - map layer with polyline and day segmentation with camp markers
-- basic hoversync   - done
+- basic hoversync - done
 - day switches according to hovermapMarker position 
 - timeplay which is not exactly time play
 - iframe ready layout (has to cater to mobile)
 - good tooltips
 - basic metrics and info (where does the trek start where it ends and other bs )
 - add a recenter button that triggers bounds
+- recenter on resume, reset + recenter button
+- limit zoom

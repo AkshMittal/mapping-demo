@@ -1,7 +1,9 @@
-import { highlightDaySegment, clearCampPause } 
+import { highlightDaySegment, clearCampPause, getCampMarkers } 
 from "./gpx-engine.js";
-import { getCampContext, getDayContext, getDayForIndex } 
+import { getCampContext, getDayContext, getDayForIndex, getCampIndices } 
 from "./itinerary-module.js";
+
+const CAMP_HOVER_SNAP_WINDOW = 50; 
 
 export const HoverSource = {
   CHART: 'chart',
@@ -24,21 +26,75 @@ let smoothedData = [];
 let hoverIndex = -1;
 let hoverSource = null;
 
-export function setHoverIndex(index, source = HoverSource.PROGRAM) {
-    if (index === hoverIndex && source === hoverSource) return;
+export function setHoverIndex(nextIndex, source) {
+    if (typeof nextIndex !== "number" || nextIndex < 0) return;
+  
+    let resolvedIndex = nextIndex;
+    let resolvedSource = source;
+  
+    // ─────────────────────────────────────────────
+    // 1️⃣ CAMP SNAP (INDEX NORMALIZATION ONLY)
+    // ─────────────────────────────────────────────
+    if (source === HoverSource.CHART || source === HoverSource.MAP) {
+      const campIndices = getCampIndices();
+      const snapped = campIndices.find(ci =>
+        Math.abs(ci - nextIndex) <= CAMP_HOVER_SNAP_WINDOW
+      );
+  
+      if (snapped !== undefined) {
+        resolvedIndex = snapped;
+        resolvedSource = HoverSource.CAMP; // upgrade intent ONLY here
+      }
+    }
+  
+    // ─────────────────────────────────────────────
+    // 2️⃣ NO-OP GUARD
+    // ─────────────────────────────────────────────
+    if (resolvedIndex === hoverIndex && resolvedSource === hoverSource) {
+      return;
+    }
+  
+    // ─────────────────────────────────────────────
+    // 3️⃣ COMMIT STATE (SINGLE SOURCE OF TRUTH)
+    // ─────────────────────────────────────────────
+    hoverIndex = resolvedIndex;
+    hoverSource = resolvedSource;
+    const btnReset = document.getElementById("btn-reset");
 
-    hoverIndex = index;
-    hoverSource = source;
-
-    if (
-        source === HoverSource.MAP ||
-        source === HoverSource.CHART
-    ) {
-        clearCampPause();
+    if (hoverIndex === 0) {
+        btnReset.classList.add("disabled");
+    } else {
+        btnReset.classList.remove("disabled");
     }
 
-    syncVisuals(source);
-}
+  
+    // ─────────────────────────────────────────────
+    // 4️⃣ MOVE HOVER MARKER (POSITIONAL EFFECT)
+    // ─────────────────────────────────────────────
+    const pt = smoothedData[hoverIndex];
+    if (pt && hoverMapMarker) {
+      hoverMapMarker.setLatLng([pt.lat, pt.lon]);
+    }
+  
+    // ─────────────────────────────────────────────
+    // 5️⃣ VISUAL SYNC (PRESERVE SOURCE SEMANTICS)
+    // ─────────────────────────────────────────────
+    syncVisuals(resolvedSource);
+  
+    // ─────────────────────────────────────────────
+    // 6️⃣ CAMP TOOLTIP (DERIVED UI, NEVER CAUSAL)
+    // ─────────────────────────────────────────────
+    const campMarkers = getCampMarkers();
+  
+    // 1️⃣ always close ALL camp tooltips on index change
+    campMarkers.forEach(marker => marker.closeTooltip());
+
+    // 2️⃣ open tooltip ONLY if hoverIndex is a camp
+    if (campMarkers.has(hoverIndex)) {
+    campMarkers.get(hoverIndex).openTooltip();
+    }
+  }
+  
 
 export function getHoverIndex(){
     return hoverIndex;

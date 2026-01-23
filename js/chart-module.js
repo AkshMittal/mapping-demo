@@ -2,13 +2,12 @@ import { isMapPanning }
 from "./map-module.js";
 import {HoverSource, setHoverIndex } 
 from "./controller-module.js";
-
-
-
+import { ensurePausedForUserHover } 
+from "./gpx-engine.js";
 
 export function drawElevationChart(smoothedData) {
     let canvas = document.getElementById('elevationChart');
-    canvas.style.backgroundColor = "#f2efe9";
+    canvas.style.backgroundColor = "#f5ede1";
     if (!canvas) {
         console.error('#elevationChart canvas not found');
         return;
@@ -28,12 +27,12 @@ export function drawElevationChart(smoothedData) {
             datasets: [{
                 label: 'Elevation (m)',
                 data: smoothedData.map(p => p.ele),
-                borderColor: '#14305F',
-                backgroundColor: '#3c92d85b',
+                borderColor: '#283f32',
+                backgroundColor: 'rgba(40, 63, 50, 0.16)',
                 fill: true,
                 pointRadius: 1,
                 tension: 0.25,
-                borderWidth: 1
+                borderWidth: 1.2
             }]
         },
         options: {
@@ -41,6 +40,7 @@ export function drawElevationChart(smoothedData) {
             maintainAspectRatio: false,
             interaction: { mode: 'index', intersect: false },
             onHover: function(event, activeElement) {
+                ensurePausedForUserHover();
                 if(isMapPanning()){
                     return;
                 }
@@ -54,7 +54,7 @@ export function drawElevationChart(smoothedData) {
                 legend: { display: false },
                 tooltip: {
                     callbacks: {
-                        label: ctx => {
+                        label: ctx => {      
                             const p = smoothedData[ctx.dataIndex];
 
                             return [

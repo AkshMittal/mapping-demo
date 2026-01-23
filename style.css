@@ -1,142 +1,342 @@
-html, body {
+/* ============================================
+   RESET & BASE
+   ============================================ */
+   html, body {
     margin: 0;
     padding: 0;
     height: 100%;
-    overflow: hidden; 
+    width: 100%;
     font-family: 'Inter', sans-serif;
     box-sizing: border-box;
-
-}
-#main {
-    display: flex;
-    flex-direction: row;
-    height: 100vh;
-    gap: 10px;
-    /* background-color: black; */
-    box-sizing: border-box;
-    overflow-y: hidden;
-}
-
-#content {
-    flex: 3 1 0;
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-    gap: 20px;
-    padding:10px;
-    /* padding-right: 0px; */
-    box-sizing: border-box;
-    overflow-y: hidden;
-}
-#map {
-    flex: 2 1 0;
-    min-height: 0;
-    height: 100%;
-    position: relative;
-    z-index: 5;
-    border-radius: 10px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.325);
-}
-
-#playback-controls{
-    z-index: 1000;
-}
-.button {
-  padding: 8px 16px;
-  font-size: 14px;
-  font-weight: 600;
-  border-radius: 6px;
-  border: none;
-  background: #14305F;
-  color: white;
-  cursor: pointer;
-  transition: background 0.2s ease, transform 0.1s ease;
-}
-
-/* default label */
-#btn-play::after {
-  content: "Play";
-}
-
-/* PLAYING */
-#btn-play[data-state="playing"] {
-  background: #8b1e1e;
-}
-#btn-play[data-state="playing"]::after {
-  content: "Pause";
-}
-
-/* PAUSED */
-#btn-play[data-state="paused"] {
-  background: #14305F;
-}
-#btn-play[data-state="paused"]::after {
-  content: "Resume";
-}
-
-/* CAMP PAUSE (system pause) */
-#btn-play[data-state="camp_pause"] {
-  background: #FFA046;
-  color: #111;
-}
-#btn-play[data-state="camp_pause"]::after {
-  content: "Continue";
-}
-#btn-play[data-state="finished"] {
-  background: #cccccc;
-  color: #666;
-  cursor: not-allowed;
-  opacity: 0.6;
-}
-
-/* text */
-#btn-play[data-state="finished"]::after {
-  content: "Done";
-}
-
-
-/* subtle press feedback */
-#btn-play:active {
-  transform: scale(0.97);
-}
-
-#elevationChartContainer {
-    flex: 0.5 1 0;
-    min-height: 0;
-    height: 100%;
-    border-radius: 10px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.325);
-    background: #f2efe9;
-    padding: 5px;
     overflow: hidden;
 }
-.chart-disabled {
-  pointer-events: none;
-  cursor: default;
+
+*, *::before, *::after {
+    box-sizing: border-box;
+}
+:root {
+  --page-bg:      #a89d8f;   /* darker stone */
+  --surface:      #f5ede1;   /* not too bright */
+  --surface-alt:  #d4c6b5;
+  --text-main:    #1d1a16;
+  --text-muted:   #6f6558;
+  --primary:      #283f32;   /* slightly deeper pine */
+  --primary-soft: #344f40;
+  --accent:       #a25c3a;   /* muted rust */
+  --border-soft:  rgba(29, 26, 22, 0.22);
+  --shadow-soft:  0 12px 30px rgba(23, 18, 13, 0.28);
+}
+html, body {
+  background: var(--page-bg);
+  color: var(--text-main);
 }
 
-#metrics-panel {
-    flex: 1 1 0;
+/* ============================================
+   EMBED CONTAINER (Minimum Heights)
+   ============================================ */
+#embed-container {
+    width: 100%;
+    min-height: 700px; /* Minimum for desktop embed */
     height: 100%;
-    padding:10px;
-    box-sizing: border-box;
-    overflow-y: hidden;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+
+    background: var(--surface);
+    border-radius: 18px;
+    box-shadow: var(--shadow-soft);
 }
-#metrics {
-    flex: 1 1 0;
+
+/* ============================================
+   MAIN CONTENT AREA
+   ============================================ */
+#main {
+    flex: 1 1 auto;
     min-height: 0;
     height: 100%;
+    display: flex;
+    flex-direction: row;
+    gap: 10px;
+    padding: 10px;
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
+
+    background: var(--surface-alt);
+    border-radius: 14px;
+}
+
+/* ============================================
+   CONTENT COLUMN (Map + Chart)
+   ============================================ */
+#content {
+    flex: 20 1 0;
+    min-width: 400px; /* Ensure map/chart area doesn't get too narrow */
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    height: 100%;
+    overflow: hidden;
+}
+
+/* ============================================
+   MAP CONTAINER
+   ============================================ */
+#map {
+    flex: 3 1 0;
+    min-height: 0px;
+    min-width: 0;
+    position: relative;
+    z-index: 5;
+    overflow: hidden;
+
+    background: #fdf9f2;
+    border-radius: 12px;
+    border: 1px solid var(--border-soft);
+}
+
+#playback-controls {
+    z-index: 1000;
+}
+
+.button {
+    padding: 8px 16px;
+    font-size: 14px;
+    font-weight: 600;
+    border-radius: 999px; /* changed */
+    border: 1px solid rgba(0,0,0,0.18);
+    background: var(--primary);
+    color: #fff;
+    cursor: pointer;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    transition: 
+      background-color 0.2s ease, transform 0.1s ease,
+      box-shadow 0.18s ease,
+      transform 0.1s ease;
+    box-shadow: 0 0 0 rgba(0,0,0,0);
+
+}
+.button:hover {
+  box-shadow: 0 8px 16px rgba(0,0,0,0.18);
+  background: var(--primary-soft);
+}
+
+.button:active {
+  transform: scale(0.97);
+  background: #172920;
+}
+
+#btn-play::after {
+    content: "Play";
+}
+
+#btn-play[data-state="playing"] {
+    background: #8b1e1e;
+}
+
+#btn-play[data-state="playing"]::after {
+    content: "Pause";
+}
+
+#btn-play[data-state="paused"] {
+    background: var(--primary);
+}
+
+#btn-play[data-state="paused"]::after {
+    content: "Resume";
+}
+
+#btn-play[data-state="camp_pause"] {
+  background: var(--accent);
+  color: #23180f;
+}
+
+#btn-play[data-state="camp_pause"]::after {
+    content: "Continue";
+}
+
+#btn-play:active {
+    transform: scale(0.97);
+}
+
+#btn-play[data-state="finished"] {
+  background: #c5bfb2;
+  color: #5a564d;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+#btn-reset.disabled {
+  background: #c5bfb2;
+  color: #5a564d;
+  cursor: not-allowed;
+  opacity: 0.7;
+  box-shadow: none;
+}
+
+#btn-reset.disabled:hover {
+  background: #c5bfb2;
+}
+
+
+/* ============================================
+   CAMP TOOLTIP (MAP)
+   ============================================ */
+
+   .leaflet-tooltip.camp-tooltip {
+    background: var(--surface);
+    color: var(--text-main);
+  
+    border: 1px solid var(--border-soft);
     border-radius: 10px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.325);
-    background: #fff;
-    padding: 50px 20px;
-    overflow-y: hidden;
+  
+    padding: 6px 10px;
+  
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+  
+    box-shadow: var(--shadow-soft);
+  
+    white-space: nowrap;
+  }
+  
+  /* subtle hierarchy inside tooltip */
+  .leaflet-tooltip.camp-tooltip strong {
+    display: block;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--primary);
+  }
+  
+  .leaflet-tooltip.camp-tooltip span {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+  }
+  .leaflet-tooltip.camp-tooltip::before {
+    border-top-color: var(--surface);
+  }
+  
+  
+/* ============================================
+   ELEVATION CHART CONTAINER
+   ============================================ */
+#elevationChartContainer {
+    flex: 1 1 0;
+    min-height: 0;
+    min-width: 0;
+    position: relative;
+    overflow: hidden;
+
+    background: #fdf9f2;
+    border-radius: 12px;
+    border: 1px solid var(--border-soft);
+}
+
+#elevationChart {
+    width: 100%;
+    height: 100%;
+}
+
+.chart-disabled {
+    pointer-events: none;
+    cursor: default;
+}
+
+/* ============================================
+   INFO PANEL (Day/Camp + Metrics)
+   ============================================ */
+#info-panel {
+    flex: 1 1 0; /* Changed from 1 1 0 to prevent excessive growth */
+    min-width: 250px;
+    max-width: 350px; /* Prevent panel from growing too wide */
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    overflow: hidden;
+
+    background: var(--surface);
+    border-radius: 12px;
+    border: 1px solid var(--border-soft);
+    padding: 14px 14px 10px;
+}
+
+/* ============================================
+   INFO HEADER (Day & Camp Panels)
+   ============================================ */
+#info-header {
+    display: flex;
+    flex: 0 0 auto;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 0px;
+    width: 100%;
+}
+
+#day-panel {
+    flex: 1 1 auto;
+    min-height: 0px;
+    width: 100%;
+}
+
+#camp-panel {
+    flex: 1 1 auto;
+    min-height: 0px;
+    width: 100%;
+}
+
+#day-panel,
+#camp-panel {
+  background: #f8f1e2;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(30, 58, 43, 0.18);
+  transition:
+    background-color 0.18s ease,
+    color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.12s ease;
+}
+#day-panel:hover,
+#camp-panel:hover {
+  box-shadow: 0 4px 10px rgba(0,0,0,0.12);
+  transform: translateY(-1px);
+}
+
+/* ============================================
+   METRICS PANEL
+   ============================================ */
+#metrics-panel {
+    flex: 1 1 0;
+    min-height: 0;
+    overflow: hidden;
+    padding: 0;
+}
+
+#metrics {
+    width: 100%;
+    height: 100%;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    background: #f2efe9;
-    font-family: sans-serif;
-    box-sizing: border-box;
+    overflow: hidden;
+
+    background: #fdf9f2;
+    border-radius: 10px;
+    border: 1px solid var(--border-soft);
+    padding: 10px 12px;
 }
 
 .metric-row {
@@ -144,68 +344,186 @@ html, body {
     justify-content: space-between;
     align-items: center;
     padding: 10px 0;
-    border-bottom: 1px solid #d1d1d1;
+    min-height: 0px;
+    flex: 1 1 auto;
+
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
 }
-.metric-label {
-    font-size: 20px;
-    color: #555;
-    text-transform: uppercase;
-    letter-spacing: 0.4px;
+.metric-row:last-child {
+  border-bottom: none;
 }
+
 .metric-value {
     display: flex;
-    flex-direction: row ;
+    flex-direction: row;
     align-items: baseline;
 }
+
+.metric-label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
 .metric-number {
-    font-size: 18px;
-    font-weight: 600;
-    color: #111;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--primary);
 }
 
 .metric-unit {
-    font-size: 14px;
-    font-weight: 600;
-    color: #797979;
-    margin-left: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-left: 4px;
 }
 
-@media (max-width: 850px) {
-
+/* ============================================
+   MOBILE LAYOUT (Width <= 768px)
+   ============================================ */
+@media (max-width: 768px) {
+    #embed-container {
+        height: 100%;
+        min-height: 800px;
+        max-height: 100%;
+    }
 
     #main {
-        overflow: visible;
         flex-direction: column;
-        gap:20px;
-
+        gap: 10px;
+        padding: 5px;
     }
 
     #content {
-        flex:3 1 0;
-        flex-direction: column;
-        height: auto;
-        overflow: visible;
-        padding-bottom: 0;
-       
-    }
-    #map {
         flex: 3 1 0;
+        min-width: 0; /* Remove min-width constraint on mobile */
+        min-height: 0;
+        gap: 10px;
     }
-    #elevationChartContainer {
-        flex: 1.5 1 0;
-    }
-    #metricsContainer {
-        flex: 0.5 1 0;
-        padding: 0 10px 20px 10px;
-        overflow-y: visible;
-    }
-    #metrics {
-        padding: 20px 10px;
 
+    #map {
+        flex: 2 1 0;
+        min-height: 0px;
+        order: 1;
     }
-    .metric-row:last-child {
+
+    #elevationChartContainer {
+        flex: 1 1 0;
+        min-height: 0;
+        order: 2;
+    }
+
+    #info-panel {
+        flex: 1 1 0;
+        min-width: 100%;
+        max-width: 100%; /* Full width on mobile */
+        min-height: 0;
+        gap: 10px;
+        order: 3;
+    }
+
+    #info-header {
+        flex-direction: row;
+        gap: 10px;
+        min-height: 0;
+    }
+
+    #day-panel,
+    #camp-panel {
+        flex: 1 1 auto;
+        min-height: 0;
+    }
+
+    #metrics-panel {
+        min-height: 0;
+    }
+
+    #metrics {
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: 5px;
+        justify-content: space-around;
+    }
+
+    .metric-row {
+        flex: 1 1 calc(50% - 5px);
+        min-width: 140px;
+        min-height: 0;
+        padding: 0;
+        padding-left: 8px;
+        padding-right: 8px;
         border-bottom: none;
     }
-    
 
-}    
+    .metric-label {
+        font-size: 16px;
+    }
+
+    .metric-number {
+        font-size: 16px;
+    }
+
+    .metric-unit {
+        font-size: 12px;
+    }
+}
+
+/* ============================================
+   SMALL MOBILE (Width <= 480px)
+   ============================================ */
+@media (max-width: 480px) {
+    #map {
+        min-height: 0;
+    }
+
+    #elevationChartContainer {
+        min-height: 0;
+    }
+
+    #info-header {
+        flex-direction: row;
+        min-height: 0;
+    }
+
+    .metric-row {
+        flex: 1 1 100%;
+        min-width: 100%;
+        min-height: 0;
+    }
+}
+
+/* ============================================
+   TABLET LANDSCAPE (Width: 769px - 1024px)
+   ============================================ */
+@media (min-width: 769px) and (max-width: 1024px) {
+
+    #info-panel {
+        min-width: 220px;
+        max-width: 300px;
+    }
+}
+
+/* ============================================
+   DESKTOP (Width > 1024px)
+   ============================================ */
+@media (min-width: 1025px) {
+
+    #main {
+        gap: 15px;
+        padding: 15px;
+    }
+
+    #content {
+        gap: 15px;
+        min-width: 450px; /* Slightly larger min-width on desktop */
+        min-height: 0;
+    }
+
+    #info-panel {
+        min-width: 280px;
+        max-width: 350px; /* Constrain max width on desktop */
+        min-height: 0;
+    }
+}

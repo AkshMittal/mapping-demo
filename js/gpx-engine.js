@@ -14,6 +14,10 @@ import {camps,trailhead}
 from "../routes/hampta-pass/camps.js";
 
 let routeData = [];
+let routeBounds = null;
+export function getRouteBounds() {
+    return routeBounds;
+}  
 let smoothedData = [];
 let routeSegments = [];
 export function getRouteSegments() {
@@ -32,6 +36,13 @@ const PlaybackState = {
   FINISHED: 'finished'
 };
 let playbackState = PlaybackState.IDLE;
+export function ensurePausedForUserHover() {
+    if (getPlaying()) return;
+    if (playbackState !== PlaybackState.PAUSED) {
+      playbackState = PlaybackState.PAUSED;
+      btnPlay.dataset.state = playbackState;
+    }
+  }
 let playbackIndex = 0;
 function getPlaybackIndex() {
     return playbackIndex;
@@ -62,33 +73,43 @@ function syncPlaybackToHover() {
 }
 let btnReset =document.getElementById('btn-reset');
 btnReset.addEventListener("click", () => {
+    if(getHoverIndex() === 0 ) return;
+    maybeRecenterToRoute();
     resetPlayback();
 });
 let btnPlay = document.getElementById('btn-play');
 btnPlay.addEventListener("click", () => {
     if (playbackState === PlaybackState.FINISHED) return;
+    maybeRecenterToRoute();
     switch (playbackState) {
-    case PlaybackState.IDLE:
-      startPlayback();
-      btnPlay.dataset.state = playbackState;
+        case PlaybackState.IDLE:
+            startPlayback();
+            btnPlay.dataset.state = playbackState;
+            break;
 
-      break;
-
-    case PlaybackState.PLAYING:
-      pausePlayback();
-      btnPlay.dataset.state = playbackState;
-
-      break;
-    case PlaybackState.PAUSED:
-        startPlayback();
+        case PlaybackState.PLAYING:
+            pausePlayback();
+            btnPlay.dataset.state = playbackState;
+            break;
+        case PlaybackState.PAUSED:
+            startPlayback();
+            btnPlay.dataset.state = playbackState;
+        case PlaybackState.CAMP_PAUSE:
+        resumePlayback();
         btnPlay.dataset.state = playbackState;
-    case PlaybackState.CAMP_PAUSE:
-      resumePlayback();
-      btnPlay.dataset.state = playbackState;
 
-      break;
-  }
+        break;
+    }
 });
+function disableMapInteraction(el) {
+    if (!window.L) return;
+    L.DomEvent.disableClickPropagation(el);
+    L.DomEvent.disableScrollPropagation(el);
+  }
+  
+  disableMapInteraction(btnPlay);
+  disableMapInteraction(btnReset);
+  
 
 
 function startPlayback() {
@@ -247,6 +268,10 @@ const campIcon = L.icon({
     popupAnchor: [0, 0]
 });
 
+const campMarkers = new Map();
+export function getCampMarkers(){
+    return campMarkers;
+}
 function applyCamps(smoothedData) {
     const totalKm = camps[camps.length - 1].distKm;
     const N = smoothedData.length;
@@ -270,13 +295,36 @@ function applyCamps(smoothedData) {
 
 
 function renderCampMarkers(map) {
-  camps.forEach(c => {
-    const marker = L.marker([c.lat, c.lon], { icon: campIcon }).addTo(map);
-
-  });
+    camps.forEach(c => {
+        const marker = L.marker([c.lat, c.lon], { icon: campIcon })
+            .addTo(map);
+    
+        // store reference
+        campMarkers.set(c.index, marker);
+    
+        // attach tooltip
+        marker.bindTooltip(
+            `<strong>${c.name}</strong><span>Day ${c.day}</span>`,
+            {
+            direction: "top",
+            offset: [0, -8],
+            className: "camp-tooltip"
+            }
+        );
+            marker.off("mouseover");
+        marker.off("mouseout");
+        marker.off("click");
+  
+    });
 }
+  
+
 function pauseForCamp(campIndex) {
+    campMarkers.get(campIndex)?.openTooltip();
+
     playbackState = PlaybackState.CAMP_PAUSE;
+    btnPlay.dataset.state = playbackState;
+    maybeRecenterToRoute();    
     campPauseEngaged = true;
     setPlaying(false);
     lastSyncedIndex = campIndex;
@@ -339,14 +387,30 @@ const endIconNormal = L.icon({
 
 let hoverMapMarker = L.circleMarker([0, 0], {
             radius: 6,
-            color: "#14305F",    
+            color: "#283f32",    
             weight: 2,            
-            fillColor: "#FFA046", 
+            fillColor: "#f5ede1", 
             fillOpacity: 1,
             pane: 'hoverMarkerPane'
         }).addTo(getMap());
 hoverMapMarker.setStyle({opacity:0, fillOpacity:0});
 setHoverMapMarker(hoverMapMarker);
+
+function isHoverMarkerInView() {
+    if (!hoverMapMarker) return true;
+    return getMap().getBounds().contains(hoverMapMarker.getLatLng());
+}
+function maybeRecenterToRoute() {
+    if (!routeBounds) return;
+
+    if (!isHoverMarkerInView()) {
+        getMap().fitBounds(routeBounds, {
+            padding: [40, 40]
+        });
+    }
+}
+
+
 
 
 function toRadians(deg){
@@ -440,7 +504,6 @@ function processPointsAndAttach(points, layer) {
     let window = pickWindowSize(routeData.length);
     smoothedData = smoothData(routeData, window);
     setSmoothedData(smoothedData);
-
     applyCamps(smoothedData);
     renderCampMarkers(getMap());
 
@@ -451,11 +514,12 @@ function processPointsAndAttach(points, layer) {
     }
     
     hitboxLine.on('mousemove', function (evt) {
-        if (getPlaying()) return;
-        playbackState = PlaybackState.PAUSED;
+        ensurePausedForUserHover();
+        if(isMapPanning()) return;
         const now = performance.now();
         if (now - lastHoverTime < HOVER_INTERVAL) return; 
         lastHoverTime = now;
+        lastPausedCampIndex = null;
         if (!smoothedData.length || isMapPanning()) return;
         let nearestIndex = findNearestRoutePoint(evt.latlng);
         setHoverIndex(nearestIndex, HoverSource.MAP);
@@ -471,6 +535,8 @@ function processPointsAndAttach(points, layer) {
     } catch (err) {
         console.error('Failed to compute metrics:', err);
     }
+    setHoverIndex(0, HoverSource.PROGRAM);
+    hoverMapMarker.setStyle({opacity:1, fillOpacity:1});
 
 }
 
@@ -573,6 +639,7 @@ export function highlightDaySegment(dayIndex) {
     if (dayIndex === null) {
         routeSegments.forEach(seg => {
             seg.layer.setStyle({
+                color: '#ffffff',
                 opacity: 0.5,
                 weight: 3
             });
@@ -584,8 +651,8 @@ export function highlightDaySegment(dayIndex) {
     routeSegments.forEach((seg, idx) => {
         seg.layer.setStyle(
             idx === dayIndex
-                ? { opacity: 1, weight: 5 }
-                : { opacity: 0.5, weight: 3 }
+                ? { color: "rgb(255, 100, 23)", opacity: 1, weight: 4 }
+                : { color: "#ffffff",opacity: 0.5, weight: 3 }
         );
     });
 }
@@ -594,18 +661,9 @@ export function highlightDaySegment(dayIndex) {
 function drawSmoothedPolyline(map, smoothData, options = {}) {
     if (!smoothData || smoothData.length === 0) return null;
 
-    // default style
-    const PolylineStyle = Object.assign({
-        color: "#ff7700",
-        weight: 4,
-        opacity: 1,
-        smoothFactor: 1.0,
-        interactive: false,
-    }, options);
-
     const HitboxStyle = Object.assign({
         color: "#000000",
-        weight: 15,
+        weight: 30,
         opacity: 0,
         interactive: true,
         pane: 'hitboxLinePane'
@@ -621,19 +679,32 @@ function drawSmoothedPolyline(map, smoothData, options = {}) {
         const i1 = bounds[d+1];
         const segLatLngs = latlngs.slice(i0, i1 + 1); // inclusive slice
 
-        const segLine = L.polyline(segLatLngs, {
-            color: "#ff7700",
-            weight: 4,
-            opacity: 0.3,        // default dim
+        const segOutline = L.polyline(segLatLngs, {
+            color: "#000000",
+            weight: 6,              // thicker than main line
+            opacity: 0.6,
             smoothFactor: 1,
-            interactive: false,
+            dashArray: '4,8',
+            interactive: false
+        }).addTo(map);
+
+        // 2️⃣ MAIN DASHED LINE — goes on top
+        const segLine = L.polyline(segLatLngs, {
+            color: "#ffffff",
+            weight: 3,
+            opacity: 0.5,
+            smoothFactor: 1,
+            dashArray: '4,8',
+            interactive: false
         }).addTo(map);
 
         routeSegments.push({
-            layer: segLine,
+            layer: segLine,        // IMPORTANT: keep reference to top line only
+            outline: segOutline,   // optional, for future styling
             i0,
             i1
         });
+
     }
     const start = L.marker(latlngs[0], { icon: startIconLarge }).addTo(map);
     const end   = L.marker(latlngs[latlngs.length - 1], { icon: endIconNormal }).addTo(map);
@@ -641,7 +712,9 @@ function drawSmoothedPolyline(map, smoothData, options = {}) {
     // draw hitbox line 
     hitboxLine = L.polyline(latlngs, HitboxStyle).addTo(map);
     // fit bounds to route
+    routeBounds = L.latLngBounds(latlngs);
     map.fitBounds(latlngs);
+
 
 
 }
@@ -731,11 +804,6 @@ export function loadGPX(gpxPath) {
                 processPointsAndAttach(trkpts, e.target);
                 console.log("smoothedData length: ", smoothedData.length);
                 console.log("hovermapMarker: ", hoverMapMarker);   
-                requestAnimationFrame(() => {
-                    requestAnimationFrame(() => {
-                        startPlayback();
-                    });
-                });
             }).catch(err => console.error('GPX fetch fallback failed:', err));
             return;
         }
