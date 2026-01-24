@@ -331,14 +331,8 @@ function renderCampMarkers(map) {
             offset: [0, -8],
             className: "camp-tooltip"
             }
-        );
-        console.log(
-            'CAMP SNAP PHASE:',
-            camps.length,
-            camps.map(c => c.name)
-          );
-          
-            marker.off("mouseover");
+        );  
+        marker.off("mouseover");
         marker.off("mouseout");
         marker.off("click");
         
