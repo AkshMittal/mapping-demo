@@ -1,13 +1,16 @@
-import {camps, trailhead} 
-from "../routes/hampta-pass/camps.js";
+const campData = await fetch(
+  '/routes/hampta-pass/camps.json'
+).then(r => r.json());
+
+const trailhead = campData.trailhead;
+const camps = campData.camps;
+
 let campIndices = [];
 let dayBounds = [];
 let lastDay = null;
 
 // ======= SETTERS =======
-export function setCamps(arr) {
-    camps = arr;
-}
+
 
 export function setCampIndices(arr) {
     campIndices = arr;

@@ -7,11 +7,16 @@ from "./chart-module.js";
 import {setPlaying, setHoverIndex, getHoverIndex, setHoverMapMarker, setSmoothedData, getPlaying, HoverSource} 
 from "./controller-module.js";
 
-import {setCamps, setCampIndices,getCampIndices, setDayBounds, getDayBounds, getDayForIndex,} 
+import {setCampIndices,getCampIndices, setDayBounds, getDayBounds, getDayForIndex,} 
 from "./itinerary-module.js";
 
-import {camps,trailhead} 
-from "../routes/hampta-pass/camps.js";
+const campData = await fetch(
+    '/routes/hampta-pass/camps.json'
+  ).then(r => r.json());
+  
+  const trailhead = campData.trailhead;
+  const camps = campData.camps;
+  
 
 let routeData = [];
 let routeBounds = null;
@@ -277,13 +282,14 @@ function playbackLoop(now) {
 }
 
 const campIcon = L.icon({
-    iconUrl: '../resources/images/camp-icon.png',
+    iconUrl: '/resources/images/camp-icon.png',
     iconSize: [60, 60],
     iconAnchor: [30, 30],
     popupAnchor: [0, 0]
 });
 
 const campMarkers = new Map();
+
 export function getCampMarkers(){
     return campMarkers;
 }
@@ -326,10 +332,16 @@ function renderCampMarkers(map) {
             className: "camp-tooltip"
             }
         );
+        console.log(
+            'CAMP SNAP PHASE:',
+            camps.length,
+            camps.map(c => c.name)
+          );
+          
             marker.off("mouseover");
         marker.off("mouseout");
         marker.off("click");
-  
+        
     });
 }
   

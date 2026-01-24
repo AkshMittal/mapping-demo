@@ -1,0 +1,42 @@
+{
+    "trailhead": {
+      "name": "Jobri",
+      "distKm": 0,
+      "type": "trailhead"
+    },
+    "camps": [
+      {
+        "campIdx": 0,
+        "name": "Chika",
+        "distKm": 3.7,
+        "day": 1,
+        "fromName": null,
+        "toName": "Balu Ka Ghera"
+      },
+      {
+        "campIdx": 1,
+        "name": "Balu Ka Ghera",
+        "distKm": 9.2,
+        "day": 2,
+        "fromName": "Chika",
+        "toName": "Shea Goru"
+      },
+      {
+        "campIdx": 2,
+        "name": "Shea Goru",
+        "distKm": 13.7,
+        "day": 3,
+        "fromName": "Balu Ka Ghera",
+        "toName": "Chhatru"
+      },
+      {
+        "campIdx": 3,
+        "name": "Chhatru",
+        "distKm": 21.0,
+        "day": 4,
+        "fromName": "Shea Goru",
+        "toName": null
+      }
+    ]
+  }
+  
