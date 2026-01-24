@@ -1,4 +1,4 @@
-import { highlightDaySegment, clearCampPause, getCampMarkers } 
+import { highlightDaySegment, clearCampPause, setCampPauseEngaged, getCampMarkers, syncPlaybackStateToCampIfPaused, setLastPausedCampIndex } 
 from "./gpx-engine.js";
 import { getCampContext, getDayContext, getDayForIndex, getCampIndices } 
 from "./itinerary-module.js";
@@ -44,6 +44,9 @@ export function setHoverIndex(nextIndex, source) {
       if (snapped !== undefined) {
         resolvedIndex = snapped;
         resolvedSource = HoverSource.CAMP; // upgrade intent ONLY here
+        setCampPauseEngaged(true);
+        syncPlaybackStateToCampIfPaused();
+        setLastPausedCampIndex(snapped);
       }
     }
   
@@ -89,6 +92,7 @@ export function setHoverIndex(nextIndex, source) {
     // 1️⃣ always close ALL camp tooltips on index change
     campMarkers.forEach(marker => marker.closeTooltip());
 
+    
     // 2️⃣ open tooltip ONLY if hoverIndex is a camp
     if (campMarkers.has(hoverIndex)) {
     campMarkers.get(hoverIndex).openTooltip();

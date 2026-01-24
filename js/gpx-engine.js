@@ -42,7 +42,16 @@ export function ensurePausedForUserHover() {
       playbackState = PlaybackState.PAUSED;
       btnPlay.dataset.state = playbackState;
     }
-  }
+}
+  export function syncPlaybackStateToCampIfPaused() {
+    if (getPlaying()) return;
+
+    if (playbackState === PlaybackState.PAUSED) {
+        playbackState = PlaybackState.CAMP_PAUSE;
+        btnPlay.dataset.state = playbackState;
+    }
+}
+
 let playbackIndex = 0;
 function getPlaybackIndex() {
     return playbackIndex;
@@ -52,7 +61,13 @@ let elapsedAccum = 0;
 let playDuration = 12000; // 12 seconds for full GPX
 let lastSyncedIndex = -1;
 let lastPausedCampIndex = null;
+export function setLastPausedCampIndex(index){
+    lastPausedCampIndex = index;
+}
 let campPauseEngaged = false;
+export function setCampPauseEngaged(bool){
+    campPauseEngaged = bool;
+}
 export function clearCampPause(){
     campPauseEngaged = false;  
     lastPausedCampIndex = null; 
@@ -133,7 +148,7 @@ function startPlayback() {
 function resumePlayback() {
     if (getPlaying()) return;
     playbackState = PlaybackState.PLAYING;
-
+    playbackIndex = getHoverIndex();
     campPauseEngaged = false;
     const N = smoothedData.length;
     elapsedAccum = (playbackIndex / (N - 1))* playDuration;
