@@ -10,6 +10,8 @@ An extension of [RidgeView](https://github.com/AkshMittal/RidgeView). I pulled
 out only what I needed — the map, the chart, some sync logic — and left the
 rest, so I could stop fighting UI and work on the actual problem.
 
+**demo image:** ![mapping-demo](images/demo.png)
+
 ---
 
 ## The problem it actually solves
