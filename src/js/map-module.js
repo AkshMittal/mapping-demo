@@ -36,7 +36,6 @@ const worldBounds = [[-85, -180], [85, 180]];
 map.setMaxBounds(worldBounds);
 
 const tileURL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
-L.GPX.prototype._fitBounds = function() {};
 
 const attribution = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'; 
 

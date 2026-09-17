@@ -1,0 +1,12 @@
+name: viewshed
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - gdal
+  - numpy
+  - rasterio
+  - rioxarray
+  - pyproj
+  - pystac-client
+  - planetary-computer

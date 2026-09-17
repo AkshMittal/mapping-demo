@@ -7,6 +7,10 @@
      <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
      crossorigin=""/>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap">
+    <link rel="stylesheet" href="src/style.css">
 </head>
 <body>
     <div id="embed-container">
@@ -16,21 +20,51 @@
                     <div id="playback-controls" style="position:absolute; bottom:12px; left:50%; transform:translateX(-50%); display:flex; gap:8px; padding:6px 10px; background: transparent; border-radius:6px;">
                         <button id="btn-play" class="button"></button>
                         <button id="btn-reset" class="button">Reset</button>
+                        <button id="btn-viewshed" class="button" hidden>View</button>
                     </div>
+                    <div id="inset-map"></div>
                 </div>
                 <div id="elevationChartContainer">
                     <canvas id="elevationChart"></canvas>
                 </div>
             </div>
             <div id="info-panel">
-                <div id="info-header">
-                    <div id="day-panel"></div>
-                    <div id="camp-panel"></div>
-                </div>
-                <div id="metrics-panel">
+                <section id="position-card" class="info-card">
+                    <div class="card-title">Current position</div>
+                    <div id="info-header">
+                        <div id="day-panel"></div>
+                        <div id="camp-panel"></div>
+                    </div>
+                    <div id="live-metrics">
+                        <div class="metric-row">
+                            <span class="metric-label">Distance covered</span>
+                            <span class="metric-value">
+                                <span class="metric-number" id="metric-covered">--</span>
+                                <span class="metric-unit">km</span>
+                            </span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">Ascent so far</span>
+                            <span class="metric-value">
+                                <span class="metric-number" id="metric-climbed">--</span>
+                                <span class="metric-unit">m</span>
+                            </span>
+                        </div>
+                        <div id="view-distance" class="metric-row" hidden>
+                            <span class="metric-label">Farthest view</span>
+                            <span class="metric-value">
+                                <span class="metric-number" id="metric-far">--</span>
+                                <span class="metric-unit">km</span>
+                            </span>
+                        </div>
+                    </div>
+                </section>
+                <section id="overview-card" class="info-card">
+                    <div class="card-title">Trek overview</div>
+                    <div id="metrics-panel">
                     <div id="metrics">
                         <div class="metric-row">
-                            <span class="metric-label">Distance</span>
+                            <span class="metric-label">Total distance</span>
                             <span class="metric-value">
                                 <span class="metric-number" id="metric-distance">--</span>
                                 <span class="metric-unit">km</span>
@@ -58,7 +92,8 @@
                             </span>
                         </div>
                     </div>
-                </div>
+                    </div>
+                </section>
             </div>
         </div>
     </div>
@@ -66,8 +101,7 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
     integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
     crossorigin=""></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-gpx/1.5.1/gpx.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script type="module" src="/src/js/main.js"></script>
+    <script type="module" src="src/js/main.js"></script>
 </body>
 </html>

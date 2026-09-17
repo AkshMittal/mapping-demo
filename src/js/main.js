@@ -1,8 +1,10 @@
-import '../style.css'
-import { getMap } 
+import { getMap }
 from './map-module.js';
 
-import { loadGPX } 
-from './gpx-engine.js';     
+import { loadGPX }
+from './gpx-engine.js';
 
-loadGPX('/routes/hampta-pass/hampta_pass.gpx');
+import { GPX_FILE }
+from './route-config.js';
+
+loadGPX(GPX_FILE);

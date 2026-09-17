@@ -1,0 +1,251 @@
+{
+ "bounds": [
+  [
+   32.13024898527897,
+   76.9308675324759
+  ],
+  [
+   32.53723868143914,
+   77.41285859817022
+  ]
+ ],
+ "holeBounds": [
+  [
+   32.130781495034284,
+   76.93149635317478
+  ],
+  [
+   32.536708557579374,
+   77.41222977747132
+  ]
+ ],
+ "viewBounds": [
+  [
+   32.13797007249512,
+   76.93904220156138
+  ],
+  [
+   32.523454444159384,
+   77.40248305663863
+  ]
+ ],
+ "spacingM": 150,
+ "halfWindow": 3,
+ "samples": [
+  {
+   "index": 0,
+   "file": "vs_0000.png",
+   "farKm": 31.0
+  },
+  {
+   "index": 18,
+   "file": "vs_0001.png",
+   "farKm": 30.8
+  },
+  {
+   "index": 42,
+   "file": "vs_0002.png",
+   "farKm": 30.7
+  },
+  {
+   "index": 58,
+   "file": "vs_0003.png",
+   "farKm": 30.5
+  },
+  {
+   "index": 75,
+   "file": "vs_0004.png",
+   "farKm": 30.4
+  },
+  {
+   "index": 93,
+   "file": "vs_0005.png",
+   "farKm": 30.3
+  },
+  {
+   "index": 112,
+   "file": "vs_0006.png",
+   "farKm": 30.4
+  },
+  {
+   "index": 130,
+   "file": "vs_0007.png",
+   "farKm": 30.3
+  },
+  {
+   "index": 149,
+   "file": "vs_0008.png",
+   "farKm": 30.1
+  },
+  {
+   "index": 167,
+   "file": "vs_0009.png",
+   "farKm": 30.0
+  },
+  {
+   "index": 184,
+   "file": "vs_0010.png",
+   "farKm": 30.0
+  },
+  {
+   "index": 202,
+   "file": "vs_0011.png",
+   "farKm": 29.9
+  },
+  {
+   "index": 225,
+   "file": "vs_0012.png",
+   "farKm": 29.9
+  },
+  {
+   "index": 250,
+   "file": "vs_0013.png",
+   "farKm": 29.9
+  },
+  {
+   "index": 269,
+   "file": "vs_0014.png",
+   "farKm": 29.8
+  },
+  {
+   "index": 285,
+   "file": "vs_0015.png",
+   "farKm": 29.7
+  },
+  {
+   "index": 302,
+   "file": "vs_0016.png",
+   "farKm": 24.1
+  },
+  {
+   "index": 321,
+   "file": "vs_0017.png",
+   "farKm": 24.2
+  },
+  {
+   "index": 344,
+   "file": "vs_0018.png",
+   "farKm": 24.3
+  },
+  {
+   "index": 366,
+   "file": "vs_0019.png",
+   "farKm": 24.3
+  },
+  {
+   "index": 382,
+   "file": "vs_0020.png",
+   "farKm": 24.6
+  },
+  {
+   "index": 401,
+   "file": "vs_0021.png",
+   "farKm": 24.6
+  },
+  {
+   "index": 423,
+   "file": "vs_0022.png",
+   "farKm": 24.6
+  },
+  {
+   "index": 441,
+   "file": "vs_0023.png",
+   "farKm": 24.7
+  },
+  {
+   "index": 465,
+   "file": "vs_0024.png",
+   "farKm": 25.6
+  },
+  {
+   "index": 484,
+   "file": "vs_0025.png",
+   "farKm": 25.7
+  },
+  {
+   "index": 503,
+   "file": "vs_0026.png",
+   "farKm": 25.8
+  },
+  {
+   "index": 527,
+   "file": "vs_0027.png",
+   "farKm": 25.7
+  },
+  {
+   "index": 544,
+   "file": "vs_0028.png",
+   "farKm": 26.2
+  },
+  {
+   "index": 562,
+   "file": "vs_0029.png",
+   "farKm": 30.9
+  },
+  {
+   "index": 579,
+   "file": "vs_0030.png",
+   "farKm": 31.0
+  },
+  {
+   "index": 595,
+   "file": "vs_0031.png",
+   "farKm": 31.0
+  },
+  {
+   "index": 614,
+   "file": "vs_0032.png",
+   "farKm": 31.0
+  },
+  {
+   "index": 636,
+   "file": "vs_0033.png",
+   "farKm": 31.1
+  },
+  {
+   "index": 655,
+   "file": "vs_0034.png",
+   "farKm": 31.1
+  },
+  {
+   "index": 672,
+   "file": "vs_0035.png",
+   "farKm": 31.2
+  },
+  {
+   "index": 691,
+   "file": "vs_0036.png",
+   "farKm": 31.3
+  },
+  {
+   "index": 713,
+   "file": "vs_0037.png",
+   "farKm": 31.3
+  },
+  {
+   "index": 733,
+   "file": "vs_0038.png",
+   "farKm": 31.2
+  },
+  {
+   "index": 754,
+   "file": "vs_0039.png",
+   "farKm": 31.2
+  },
+  {
+   "index": 775,
+   "file": "vs_0040.png",
+   "farKm": 31.2
+  },
+  {
+   "index": 793,
+   "file": "vs_0041.png",
+   "farKm": 31.1
+  },
+  {
+   "index": 812,
+   "file": "vs_0042.png",
+   "farKm": 31.0
+  }
+ ]
+}

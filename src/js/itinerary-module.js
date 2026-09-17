@@ -1,13 +1,19 @@
-const campData = await fetch(
-  '/routes/hampta-pass/camps.json'
-).then(r => r.json());
+import { CAMPS_FILE }
+from "./route-config.js";
+
+const campData = await fetch(CAMPS_FILE).then(r => r.json());
 
 const trailhead = campData.trailhead;
 const camps = campData.camps;
+// where the last day ends; routes whose last camp IS the end can omit it
+const endpoint = campData.end ?? null;
+
+export function getCamps() {
+    return camps;
+}
 
 let campIndices = [];
-let dayBounds = [];
-let lastDay = null;
+let dayBounds = [];   // index where each day starts: [0, camp1, camp2, ...]
 
 // ======= SETTERS =======
 
@@ -55,7 +61,7 @@ export function getCampContext(i) {
   return {
     type: "between",
     fromCamp: (day === 0) ? trailhead : camps[day - 1],
-    toCamp: (day < camps.length) ? camps[day] : null
+    toCamp: (day < camps.length) ? camps[day] : endpoint
   };
 }
 
@@ -69,7 +75,7 @@ export function getDayContext(i) {
 
   const toCamp = (day < camps.length)
       ? camps[day]
-      : null; // after final camp (optional endpoint)
+      : endpoint; // after final camp
 
   const isCampBoundary = campIndices.includes(i);
 

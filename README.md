@@ -1,10 +1,14 @@
-# mapping-demo
+# mapping-demo — viewshed edition
 
 An interactive trek route viewer — the kind of thing a trek page would embed
 instead of a static image and a paragraph of text. Built as a commercial demo.
 
-**Live:** https://www.trekmaps.in/
-**Build writeup:** [Raw write-up of a demo I built while extending RidgeView](https://medium.com/@akshmittal/raw-write-up-of-a-demo-i-built-while-extending-ridgeview-6d7679a2cbfe)
+This repo is the second pass on the original mapping-demo: the foundation got
+fixed, and the viewer now shows **what you can actually see from the trail** as
+the marker moves.
+
+**Original version:** https://www.trekmaps.in/
+**Build writeup (original):** [Raw write-up of a demo I built while extending RidgeView](https://medium.com/@akshmittal/raw-write-up-of-a-demo-i-built-while-extending-ridgeview-6d7679a2cbfe)
 
 An extension of [RidgeView](https://github.com/AkshMittal/RidgeView). I pulled
 out only what I needed — the map, the chart, some sync logic — and left the
@@ -31,25 +35,85 @@ visual honesty.
 
 ---
 
-## What it does
+## What changed in this version
 
-- **Timeplay** — the route plays through, updating information as the marker
-  moves, so a trek reads as something that happens over time rather than a line
-- **Camp snapping** — playback pauses at camps, so a day reads as a unit
-- **Hover sync** — chart and map drive each other; hovering hands control back
-  to the user
-- **Day segmentation** — the active day highlights on both map and chart
-- **Recentering** — if the marker leaves the viewport, the map follows it back
-- **Map layers** — topographic and satellite, genuinely useful on technical
-  routes
-- **Metrics** — distance, elevation gain, start and end
-- **Two routes** — Hampta Pass and Kedarkantha, with camp data
+### Fixed
+
+- **One index again.** The original split into a main index, a separate
+  `playbackIndex` and fractional indexing (story below). Once the real cause —
+  a full `chart.update()` every frame — was out of the loop, all of that came
+  out. Now a single `index` plus a `playing` flag drive the marker, chart,
+  panels, day highlight, camp stops and button states. Button state is derived
+  from the index, never stored.
+- **Camp stops without snapping windows.** Playback turns elapsed time into an
+  integer index; if a camp lies between the current and next index, it lands
+  exactly on it and stops. No proximity guesses, no "last paused camp" state.
+- **Camp snapping is one implementation.** Hover snapping is a single check in
+  `setIndex`, measured in screen pixels of whatever is hovered (map or chart),
+  so it scales with zoom by itself — the old fixed threshold is gone.
+- **Elevations come from a DEM.** Every GPX point's elevation is replaced with
+  the Copernicus GLO-30 value at that point. Recorded elevations were offset by
+  tens of metres and noisy, which is what made ascent and grade jumpy.
+- **Sparse tracks are densified.** Points are filled in every 10 m before the
+  DEM step, so a 50 m-spaced recording still gives a smooth line, hover and
+  playback.
+- **GPX loads with a plain `fetch`.** The leaflet-gpx plugin was only there to
+  trigger a second fetch; it's gone, along with its console warning.
+
+### Removed
+
+- Dual-index system, fractional indexing, both camp-snap windows
+- Vite — the page is plain static files (native ES modules, Leaflet and
+  Chart.js from CDNs)
+- Kedarkantha route (had no camp data), unused `camps.js`, the old plan and
+  scoping notes
+
+### Added
+
+- **Viewshed.** A dim mask over the map with the ground visible from the
+  current position cut out. It follows the same single index as everything
+  else — no new sync system.
+  - Precomputed per route (`tools/viewshed/`): `gdal_viewshed` every 150 m along
+    the route, observer at 1.7 m.
+  - Each shown mask is the **union of the viewsheds ±3 samples (~±450 m)**
+    around the point. A single point is prone to one-off obstructions; the
+    union shows the view around that stretch.
+  - Feathered edges, 250 ms crossfade between masks, masks shipped as small
+    alpha PNGs on a shared grid. The dim level is CSS, per map/layer.
+  - Commercial styling on purpose: one soft highlight, no colormap, no legend.
+- **Inset map.** A fixed, non-interactive overview in the corner showing the
+  full viewshed extent with the mask always on. The main map stays free to pan
+  and zoom, frames the route, and has the viewshed as an optional VIEW toggle.
+- **Patalsu route.** Viewsheds work best on a climb, not a valley, so the demo
+  now shows Patalsu (Solang Valley → Summit Camp → summit, ascent only). Camps
+  can be placed by coordinates; the last day runs to the route end. Hampta Pass
+  is still available.
+- **Live figures.** Distance covered, ascent so far and farthest visible
+  distance update with the position; whole-trek figures sit in their own card.
+- **Chart.** Progress fill up to the current position and a labelled line at
+  each camp.
+- **Mobile layout.** Single scrolling column, compact metric grids, tap on the
+  route to move, horizontal drag on the chart to scrub.
+- **Style.** Start/end markers in the page palette, outlined VIEW toggle, Inter
+  actually loaded, tile-gap and focus-ring fixes, no iframe-style rounded page.
+- **Netlify deploy** (`netlify.toml`) that publishes only the page's files.
+
+### Decisions worth recording
+
+- **DEM buffer:** 20 km around the route for Patalsu (reaches Deo Tibba). For
+  Hampta, a +5 km test added ~7.6% visible area on average — not worth it.
+- **Union over gradients:** plain OR of neighbouring viewsheds. No weighting;
+  it was the simplest thing that looked clearly better than a single point.
+- **Delta-encoding masks** against a reference was considered and dropped:
+  payload is ~3 MB, swaps are one `setUrl`, nothing measurably needed it.
+- **Precompute, then hardcode.** Fit extents, farthest distances and hole
+  bounds are computed once and stored in the manifest.
 
 ---
 
-## The dual-index system, and why it shouldn't exist
+## The dual-index system, and why it existed
 
-This is the honest part.
+The history behind the "Fixed" section above.
 
 I committed early to a single source of truth: one index driving the chart, the
 map, the info panels and playback. Correct model. But playback was ugly — the
@@ -69,12 +133,11 @@ was suddenly butter smooth.
 The chart was the performance killer. I had been calling `chart.update()` on
 every iteration of the playback loop, rebuilding the entire chart every frame,
 when `chart.draw()` or `chart.update('none')` was what I wanted. **The whole
-dual-index system exists because of that one mistake.**
+dual-index system existed because of that one mistake.**
 
-By the time I understood this I was deep in makeshifts built on top of it — camp
-snapping, fractional indices skipping semantic points, sync rules everywhere —
-so I kept it. It's wrong, and it's still here. Makeshifts on makeshifts compound
-fast, and this is what that looks like.
+In the original I kept it, because too much had been built on top. This version
+is where it finally came out — before the viewshed went in, so the new layer
+could read one index like everything else instead of inheriting the tangle.
 
 ---
 
@@ -82,28 +145,19 @@ fast, and this is what that looks like.
 
 **Precompute anything that can be precomputed.** RidgeView computed slope
 dynamically for hover tooltips, which tanked on fast hovers. Slope and related
-metrics now go into arrays at load time and the chart reads static data.
+metrics go into arrays at load time and the chart reads static data. The
+viewshed follows the same rule, taken further: everything is computed offline.
 
 **CSS beat async wiring.** Panning the map could trigger chart hovers and route
-snapping. Handling it through map event listeners failed because the map is
-created before the chart. Rather than pollute the mental model with async
-initialization, a class toggled during panning kills pointer events on the
-chart. Crude, effective, much cleaner than the alternative.
+snapping. A class toggled during panning kills pointer events on the chart.
+Crude, effective, much cleaner than the alternative.
 
-**Recentering by visibility, not bounds.** An invisible bounding box felt wrong.
-Instead it tracks whether the hover marker is actually in view and only
-recenters when it isn't — so a small pan doesn't yank the map back.
+**Recentering by visibility, not bounds.** It tracks whether the marker is
+actually in view and only recenters when it isn't — so a small pan doesn't yank
+the map back.
 
-**Camp snapping is proximity-based.** Fractional indexing interpolates between
-points and frame skipping jumps semantic points, so camps were sometimes hit and
-sometimes missed. If the playback index comes close enough to a stored camp
-index, it snaps and pauses. The same logic is reused for hover snapping on map
-and chart — currently two implementations that should be one.
-
-**Bi-directional sync got deleted.** I imported it from RidgeView because I was
-proud of it. Once timeplay and the camp/day panels existed, it was obvious that
-a single source of truth with unidirectional flow was the right model. It felt
-bad to delete something that looked clever.
+**Bi-directional sync got deleted.** Once timeplay and the camp/day panels
+existed, a single source of truth with unidirectional flow was clearly right.
 
 ---
 
@@ -111,42 +165,49 @@ bad to delete something that looked clever.
 
 ```
 src/js/
-├── gpx-engine.js         parsing, smoothing, playback, camps, recentering
-├── controller-module.js  wiring and UI state
+├── main.js               entry
+├── route-config.js       which route the page shows
+├── controller-module.js  the single index + everything derived from it
+├── gpx-engine.js         loading, smoothing, playback, camps, route drawing
 ├── map-module.js         Leaflet setup
-├── chart-module.js       elevation chart
-└── itinerary-module.js   day list
-public/routes/            GPX + camps.json per route
+├── chart-module.js       elevation chart, progress fill, camp lines
+├── itinerary-module.js   camps and day logic
+├── viewshed-module.js    mask layer (attachable to any map)
+└── inset-module.js       fixed viewshed overview map
+public/routes/<route>/    prepared GPX, source GPX, camps.json
+public/viewshed/<route>/  mask PNGs + manifest (Patalsu committed)
+tools/viewshed/           precompute pipeline (Python, GDAL)
 ```
 
-**Tech:** vanilla JavaScript (ES modules), Leaflet, Chart.js, Vite. No framework.
+**Tech:** vanilla JavaScript (ES modules), Leaflet, Chart.js. No framework, no
+build step. Precompute: Python, GDAL, rasterio, Planetary Computer.
+
+### Regenerating a route
+
+```
+conda env create -f tools/viewshed/environment.yml
+# VIEWSHED_ROUTE=patalsu (default) or hampta-pass
+conda run -n viewshed python tools/viewshed/fetch_dem.py          # DEM, route bbox + buffer
+conda run -n viewshed python tools/viewshed/prepare_route.py      # densify + DEM elevations
+conda run -n viewshed python tools/viewshed/compute_viewsheds.py  # slow, once
+conda run -n viewshed python tools/viewshed/render_masks.py       # fast, tune here
+```
+
+Switch the page with `ROUTE` in `src/js/route-config.js`.
 
 ---
 
-## Status and known wrongness
+## Status and known limits
 
-A demo. It behaves correctly; the foundation under it is weak.
+A demo, and now on a foundation that holds.
 
-- The dual-index system shouldn't exist (above)
-- Camp snapping is implemented twice
-- Smoothing alone isn't enough. The correct sequence is **outlier removal →
-  smoothing → downsampling** — downsampling bad data just gives smaller bad
-  data. Normalization has to come first. That's the rebuild.
-- Snapping tolerance is a fixed threshold; it should scale with zoom level
-- Routes are hardcoded under `public/routes/`, `camps.json` hand-written
-- Mobile works but wasn't the priority
-- Timeplay is animation over point index, not real elapsed time
-
-At some point I decided correct behaviour mattered more than perfect structure,
-since this gets rebuilt on a stronger data foundation anyway.
-
-Commercial scoping notes are in `commercial DEMO inclusions and trad.txt`, kept
-as written.
-
----
-
-## Provenance
-
-Written by hand — modularization, every function, the smoothing and playback
-logic. I asked AI questions and read docs while building, because I was learning
-as I built. Nothing here is pasted.
+- Smoothing is still a moving average. The fuller sequence is **outlier removal
+  → smoothing → downsampling**; the DEM elevations and densifying cover the
+  worst of it for these routes.
+- Routes are configured by hand (config + `camps.json`). Fine for a demo; each
+  new route gets its own config.
+- Timeplay is animation over point index, not elapsed time — deliberately; the
+  day/camp structure already carries the time dimension.
+- Farthest view is limited to the DEM extent used for that route.
+- Route tracks are Wikiloc recordings; map tiles are OSM / CyclOSM / Esri. Both
+  need licensing checked before any commercial use.

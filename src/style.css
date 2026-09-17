@@ -43,8 +43,6 @@ html, body {
     overflow: hidden;
 
     background: var(--surface);
-    border-radius: 18px;
-    box-shadow: var(--shadow-soft);
 }
 
 /* ============================================
@@ -63,7 +61,6 @@ html, body {
     overflow: hidden;
 
     background: var(--surface-alt);
-    border-radius: 14px;
 }
 
 /* ============================================
@@ -168,6 +165,91 @@ html, body {
   opacity: 0.7;
 }
 
+/* VIEW is a toggle: outlined when off, filled rust when on */
+#btn-viewshed {
+  background: var(--surface);
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+#btn-viewshed:hover {
+  background: #fdf9f2;
+}
+
+#btn-viewshed.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #23180f;
+}
+
+/* start / end markers in the page palette */
+.route-pin {
+  border-radius: 50%;
+  border: 2px solid var(--surface);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+}
+
+.route-pin.start {
+  background: var(--primary);
+}
+
+.route-pin.end {
+  background: var(--accent);
+}
+
+/* no mouse-click focus ring on the map; keyboard focus still shows it */
+.leaflet-container:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* hairline gaps between tiles at fractional device pixel ratios */
+.leaflet-container img.leaflet-tile {
+  mix-blend-mode: plus-lighter;
+}
+
+/* viewshed mask: PNGs/polygon are opaque black, the pane sets how dim */
+.leaflet-viewshed-pane {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+/* satellite imagery is bright; dim harder so lit areas still read */
+.leaflet-viewshed-pane.on-satellite {
+  opacity: 0.65;
+}
+
+/* inset is small; dim a bit harder so lit patches still read */
+.leaflet-viewshed-pane.inset {
+  opacity: 0.65;
+}
+
+/* ============================================
+   INSET MAP (fixed viewshed overview)
+   ============================================ */
+#inset-map {
+  position: absolute;
+  right: 10px;
+  bottom: 26px;           /* clear of the attribution */
+  width: 30%;
+  max-width: 280px;
+  aspect-ratio: 1 / 1;
+  z-index: 1000;
+  cursor: default;
+
+  border-radius: 10px;
+  border: 2px solid var(--surface);
+  box-shadow: var(--shadow-soft);
+  overflow: hidden;
+}
+
+.viewshed-img {
+  transition: opacity 250ms ease;
+}
+
+.leaflet-viewshed-pane.off {
+  display: none;
+}
+
 #btn-reset.disabled {
   background: #c5bfb2;
   color: #5a564d;
@@ -247,7 +329,9 @@ html, body {
 }
 
 /* ============================================
-   INFO PANEL (Day/Camp + Metrics)
+   INFO PANEL: two cards
+   position-card → changes with the marker (day / camp)
+   overview-card → static whole-trek numbers
    ============================================ */
 #info-panel {
     flex: 1 1 0; /* Changed from 1 1 0 to prevent excessive growth */
@@ -258,11 +342,64 @@ html, body {
     flex-direction: column;
     gap: 10px;
     overflow: hidden;
+}
+
+.info-card {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-height: 0;
+    overflow: hidden;
 
     background: var(--surface);
     border-radius: 12px;
     border: 1px solid var(--border-soft);
-    padding: 14px 14px 10px;
+    padding: 12px 14px;
+}
+
+#position-card {
+    flex: 1 1 auto;
+}
+
+#overview-card {
+    flex: 0 0 auto;
+}
+
+/* static card sizes to its content instead of stretching */
+#overview-card #metrics-panel {
+    flex: 0 0 auto;
+}
+
+#overview-card #metrics {
+    height: auto;
+}
+
+#live-metrics {
+    display: flex;
+    flex-direction: column;
+    padding: 0 2px;
+}
+
+#live-metrics .metric-row,
+#overview-card .metric-row {
+    flex: 0 0 auto;
+    padding: 8px 0;
+}
+
+#live-metrics .metric-row:last-child {
+    border-bottom: none;
+}
+
+#view-distance[hidden] {
+    display: none;
+}
+
+.card-title {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--text-muted);
 }
 
 /* ============================================
@@ -381,116 +518,155 @@ html, body {
 }
 
 /* ============================================
-   MOBILE LAYOUT (Width <= 768px)
+   MOBILE (Width <= 768px)
+   One scrolling column: map → current position → chart → trek overview.
+   #content and #info-panel become display: contents so their children can
+   be ordered as siblings of #main.
    ============================================ */
 @media (max-width: 768px) {
+    html, body {
+        height: auto;
+        overflow: auto;
+    }
+
     #embed-container {
-        height: 100%;
-        min-height: 800px;
-        max-height: 100%;
+        height: auto;
+        min-height: 0;
+        overflow: visible;
     }
 
     #main {
         flex-direction: column;
+        height: auto;
         gap: 10px;
-        padding: 5px;
+        padding: 8px;
+        overflow: visible;
     }
 
-    #content {
-        flex: 3 1 0;
-        min-width: 0; /* Remove min-width constraint on mobile */
-        min-height: 0;
-        gap: 10px;
+    #content,
+    #info-panel {
+        display: contents;
     }
 
     #map {
-        flex: 2 1 0;
-        min-height: 0px;
         order: 1;
+        flex: none;
+        height: 58vh;
+        min-height: 300px;
+    }
+
+    #position-card {
+        order: 2;
+        flex: none;
     }
 
     #elevationChartContainer {
-        flex: 1 1 0;
-        min-height: 0;
-        order: 2;
-    }
-
-    #info-panel {
-        flex: 1 1 0;
-        min-width: 100%;
-        max-width: 100%; /* Full width on mobile */
-        min-height: 0;
-        gap: 10px;
         order: 3;
+        flex: none;
+        height: 200px;
     }
 
+    #overview-card {
+        order: 4;
+        flex: none;
+    }
+
+    .info-card {
+        padding: 10px 12px;
+        gap: 8px;
+    }
+
+    /* day + camp chips side by side */
     #info-header {
         flex-direction: row;
-        gap: 10px;
-        min-height: 0;
+        gap: 8px;
     }
 
-    #day-panel,
+    #day-panel {
+        flex: 0 0 auto;
+        width: auto;
+    }
+
     #camp-panel {
         flex: 1 1 auto;
-        min-height: 0;
+        width: auto;
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-align: center;
     }
 
-    #metrics-panel {
-        min-height: 0;
+    /* figures as compact grids: label above number */
+    #live-metrics,
+    #overview-card #metrics {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 6px;
     }
 
-    #metrics {
-        flex-direction: row;
-        flex-wrap: wrap;
-        gap: 5px;
-        justify-content: space-around;
+    #overview-card #metrics {
+        grid-template-columns: repeat(2, 1fr);
+        padding: 8px 10px;
     }
 
-    .metric-row {
-        flex: 1 1 calc(50% - 5px);
-        min-width: 140px;
-        min-height: 0;
-        padding: 0;
-        padding-left: 8px;
-        padding-right: 8px;
+    #live-metrics .metric-row,
+    #overview-card .metric-row {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 2px;
+        padding: 4px 0;
         border-bottom: none;
     }
 
     .metric-label {
-        font-size: 16px;
+        font-size: 10px;
+        letter-spacing: 0.1em;
     }
 
     .metric-number {
-        font-size: 16px;
+        font-size: 18px;
     }
 
-    .metric-unit {
+    /* map chrome: pinch replaces the zoom buttons; inset moves top-left,
+       clear of the centred playback buttons */
+    .leaflet-control-zoom {
+        display: none;
+    }
+
+    #inset-map {
+        top: 10px;
+        left: 10px;
+        right: auto;
+        bottom: auto;
+        width: 36%;
+        max-width: 170px;
+        border-width: 1px;
+    }
+
+    #playback-controls {
+        bottom: 8px !important;   /* overrides the inline style */
+        gap: 6px !important;
+        padding: 4px !important;
+    }
+
+    .button {
+        padding: 7px 12px;
         font-size: 12px;
+        letter-spacing: 0.06em;
+    }
+
+    /* vertical swipes scroll the page, horizontal ones scrub the chart */
+    #elevationChart {
+        touch-action: pan-y;
     }
 }
 
-/* ============================================
-   SMALL MOBILE (Width <= 480px)
-   ============================================ */
-@media (max-width: 480px) {
-    #map {
-        min-height: 0;
+@media (max-width: 380px) {
+    #live-metrics {
+        grid-template-columns: repeat(2, 1fr);
     }
 
-    #elevationChartContainer {
-        min-height: 0;
-    }
-
-    #info-header {
-        flex-direction: row;
-        min-height: 0;
-    }
-
-    .metric-row {
-        flex: 1 1 100%;
-        min-width: 100%;
-        min-height: 0;
+    .button {
+        padding: 6px 10px;
     }
 }
 

@@ -1,0 +1,21 @@
+{
+    "trailhead": {
+      "name": "Solang Valley",
+      "type": "trailhead"
+    },
+    "camps": [
+      {
+        "campIdx": 0,
+        "name": "Summit Camp",
+        "lat": 32.336736,
+        "lon": 77.168333,
+        "day": 1,
+        "fromName": "Solang Valley",
+        "toName": "Patalsu Summit"
+      }
+    ],
+    "end": {
+      "name": "Patalsu Summit",
+      "type": "summit"
+    }
+}

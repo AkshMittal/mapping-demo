@@ -1,153 +1,184 @@
-import { highlightDaySegment, clearCampPause, setCampPauseEngaged, getCampMarkers, syncPlaybackStateToCampIfPaused, setLastPausedCampIndex } 
+import { highlightDaySegment, getCampMarkers }
 from "./gpx-engine.js";
-import { getCampContext, getDayContext, getDayForIndex, getCampIndices } 
+import { getCampContext, getDayContext, getDayForIndex, getCampIndices }
 from "./itinerary-module.js";
+import { syncViewshed, buildViewshedLookup }
+from "./viewshed-module.js";
+import { getMap }
+from "./map-module.js";
+import { syncInset }
+from "./inset-module.js";
+import { setChartProgress }
+from "./chart-module.js";
 
-const CAMP_HOVER_SNAP_WINDOW = 50; 
-
-export const HoverSource = {
+// ─────────────────────────────────────────────
+// SINGLE SOURCE OF TRUTH
+// index   → where we are on the route (integer into smoothedData)
+// playing → whether playback is advancing the index
+// everything else (marker, chart, panels, buttons) is derived from these two
+// ─────────────────────────────────────────────
+export const Source = {
   CHART: 'chart',
   MAP: 'map',
-  CAMP: 'camp',
   PROGRAM: 'program'
 };
 
-
+let index = -1;
 let playing = false;
-export function setPlaying(_playing){
-    playing = _playing;
-}
-export function getPlaying(){
-    return playing;
-}
-
-let hoverMapMarker = null;
 let smoothedData = [];
-let hoverIndex = -1;
-let hoverSource = null;
-
-export function setHoverIndex(nextIndex, source) {
-    if (typeof nextIndex !== "number" || nextIndex < 0) return;
-  
-    let resolvedIndex = nextIndex;
-    let resolvedSource = source;
-  
-    // ─────────────────────────────────────────────
-    // 1️⃣ CAMP SNAP (INDEX NORMALIZATION ONLY)
-    // ─────────────────────────────────────────────
-    if (source === HoverSource.CHART || source === HoverSource.MAP) {
-      const campIndices = getCampIndices();
-      const snapped = campIndices.find(ci =>
-        Math.abs(ci - nextIndex) <= CAMP_HOVER_SNAP_WINDOW
-      );
-  
-      if (snapped !== undefined) {
-        resolvedIndex = snapped;
-        resolvedSource = HoverSource.CAMP; // upgrade intent ONLY here
-        setCampPauseEngaged(true);
-        syncPlaybackStateToCampIfPaused();
-        setLastPausedCampIndex(snapped);
-      }
-    }
-  
-    // ─────────────────────────────────────────────
-    // 2️⃣ NO-OP GUARD
-    // ─────────────────────────────────────────────
-    if (resolvedIndex === hoverIndex && resolvedSource === hoverSource) {
-      return;
-    }
-  
-    // ─────────────────────────────────────────────
-    // 3️⃣ COMMIT STATE (SINGLE SOURCE OF TRUTH)
-    // ─────────────────────────────────────────────
-    hoverIndex = resolvedIndex;
-    hoverSource = resolvedSource;
-    const btnReset = document.getElementById("btn-reset");
-
-    if (hoverIndex === 0) {
-        btnReset.classList.add("disabled");
-    } else {
-        btnReset.classList.remove("disabled");
-    }
-
-  
-    // ─────────────────────────────────────────────
-    // 4️⃣ MOVE HOVER MARKER (POSITIONAL EFFECT)
-    // ─────────────────────────────────────────────
-    const pt = smoothedData[hoverIndex];
-    if (pt && hoverMapMarker) {
-      hoverMapMarker.setLatLng([pt.lat, pt.lon]);
-    }
-  
-    // ─────────────────────────────────────────────
-    // 5️⃣ VISUAL SYNC (PRESERVE SOURCE SEMANTICS)
-    // ─────────────────────────────────────────────
-    syncVisuals(resolvedSource);
-  
-    // ─────────────────────────────────────────────
-    // 6️⃣ CAMP TOOLTIP (DERIVED UI, NEVER CAUSAL)
-    // ─────────────────────────────────────────────
-    const campMarkers = getCampMarkers();
-  
-    // 1️⃣ always close ALL camp tooltips on index change
-    campMarkers.forEach(marker => marker.closeTooltip());
-
-    
-    // 2️⃣ open tooltip ONLY if hoverIndex is a camp
-    if (campMarkers.has(hoverIndex)) {
-    campMarkers.get(hoverIndex).openTooltip();
-    }
-  }
-  
-
-export function getHoverIndex(){
-    return hoverIndex;
-}
+let hoverMapMarker = null;
 
 export function setSmoothedData(_smoothedData){
     smoothedData = _smoothedData;
+    buildViewshedLookup(smoothedData.length);
 }
 export function setHoverMapMarker(_hoverMapMarker){
     hoverMapMarker = _hoverMapMarker;
 }
 
-export function syncHoverMapMarker(i) {
-    const pt = smoothedData[i];
-    if (!pt || !hoverMapMarker) return;
-    hoverMapMarker.setLatLng([pt.lat, pt.lon]);
+export function getIndex(){
+    return index;
+}
+export function getPlaying(){
+    return playing;
 }
 
-export function syncChartHighlight() {
-    // if (getPlaying()) return; // skip during playback
+export function setIndex(nextIndex, source = Source.PROGRAM) {
+    if (typeof nextIndex !== "number" || nextIndex < 0 || nextIndex >= smoothedData.length) return;
+    const snapped = snapToCamp(nextIndex, source);
+    if (snapped !== nextIndex) source = Source.PROGRAM; // chart must follow to the camp too
+    nextIndex = snapped;
+    if (nextIndex === index) return;
+    index = nextIndex;
+    syncAll(source);
+}
+
+// Hover snap: a camp within CAMP_SNAP_PX on screen wins over the hovered point.
+// Measured in the pixel space of whatever is being hovered, so it scales with
+// map zoom / chart width by itself.
+const CAMP_SNAP_PX = 12;
+
+function pixelOf(i, source) {
+    if (source === Source.MAP) {
+        const p = smoothedData[i];
+        return getMap().latLngToContainerPoint([p.lat, p.lon]);
+    }
+    const el = window.elevationChart?.getDatasetMeta(0).data[i];
+    return el ? { x: el.x, y: 0 } : null; // chart: horizontal distance only
+}
+
+function snapToCamp(i, source) {
+    if (source !== Source.MAP && source !== Source.CHART) return i;
+    const at = pixelOf(i, source);
+    if (!at) return i;
+
+    let best = i;
+    let bestDist = CAMP_SNAP_PX;
+    for (const ci of getCampIndices()) {
+        const c = pixelOf(ci, source);
+        if (!c) continue;
+        const d = Math.hypot(c.x - at.x, c.y - at.y);
+        if (d <= bestDist) {
+            best = ci;
+            bestDist = d;
+        }
+    }
+    return best;
+}
+
+export function setPlaying(_playing){
+    if (_playing === playing) return;
+    playing = _playing;
+
+    const chart = window.elevationChart;
+    if (chart) {
+        chart.canvas.classList.toggle("chart-disabled", playing);
+        chart.options.plugins.tooltip.enabled = !playing;
+    }
+    syncAll(Source.PROGRAM);
+}
+
+// derived, never stored
+export const PlaybackState = {
+  IDLE: 'idle',
+  PLAYING: 'playing',
+  PAUSED: 'paused',
+  CAMP_PAUSE: 'camp_pause',
+  FINISHED: 'finished'
+};
+
+export function getPlaybackState() {
+    if (playing) return PlaybackState.PLAYING;
+    if (index >= smoothedData.length - 1) return PlaybackState.FINISHED;
+    if (index <= 0) return PlaybackState.IDLE;
+    if (getCampIndices().includes(index)) return PlaybackState.CAMP_PAUSE;
+    return PlaybackState.PAUSED;
+}
+
+// ─────────────────────────────────────────────
+// SYNC (all derived UI)
+// ─────────────────────────────────────────────
+function syncAll(source) {
+    if (index < 0) return;
+
+    syncMarker();
+    syncDaySegment();
+    syncPanels();
+    syncCampTooltips();
+    syncViewshed(index);
+    syncInset(index);
+    syncChart(source);
+    syncButtons();
+}
+
+function syncMarker() {
+    const pt = smoothedData[index];
+    if (pt && hoverMapMarker) {
+        hoverMapMarker.setLatLng([pt.lat, pt.lon]);
+    }
+}
+
+function syncDaySegment() {
+    const campCtx = getCampContext(index);
+    highlightDaySegment(campCtx.type === "at" ? null : getDayForIndex(index));
+}
+
+function syncCampTooltips() {
+    const campMarkers = getCampMarkers();
+    campMarkers.forEach(marker => marker.closeTooltip());
+    if (campMarkers.has(index)) {
+        campMarkers.get(index).openTooltip();
+    }
+}
+
+function syncChart(source) {
     const chart = window.elevationChart;
     if (!chart) return;
-    const i = hoverIndex;
-    chart.tooltip?.setActiveElements([{ datasetIndex: 0, index: i }]);
+    setChartProgress(index);
+    // hovering the chart already places its own tooltip
+    if (source !== Source.CHART) {
+        const el = chart.getDatasetMeta(0).data[index];
+        chart.tooltip?.setActiveElements(
+            [{ datasetIndex: 0, index }],
+            el ? { x: el.x, y: el.y } : { x: 0, y: 0 }
+        );
+    }
     chart.update('none');
 }
 
+const btnPlay = document.getElementById('btn-play');
+const btnReset = document.getElementById('btn-reset');
 
-
-//day and camp
-
-let lastCampContext = null;
-let lastDay = null;
-function campContextEqual(ctx1, ctx2) {
-    if (!ctx1 && !ctx2) return true;
-    if (!ctx1 || !ctx2) return false;
-    if (ctx1.type !== ctx2.type) return false;
-    if (ctx1.type === "at") {
-        return ctx1.camp.index === ctx2.camp.index;
-    }
-    // between context
-    return ctx1.from === ctx2.from && ctx1.to === ctx2.to;
+function syncButtons() {
+    btnPlay.dataset.state = getPlaybackState();
+    btnReset.classList.toggle("disabled", index === 0 && !playing);
 }
 
-const dayPanel = document.getElementById('day-panel');
-const campPanel = document.getElementById('camp-panel');
-
+// ─────────────────────────────────────────────
+// DAY / CAMP PANELS
+// ─────────────────────────────────────────────
 function syncCampPanel(campCtx) {
-    const panel = document.querySelector("#camp-panel");
+    const panel = document.getElementById("camp-panel");
     if (!panel) return;
 
     if (campCtx.type === "at") {
@@ -158,63 +189,31 @@ function syncCampPanel(campCtx) {
         panel.textContent = `${from} → ${to}`;
     }
 }
+
 function syncDayPanel(dayCtx, campCtx) {
-    const panel = document.querySelector("#day-panel");
+    const panel = document.getElementById("day-panel");
     if (!panel) return;
 
-    // NORMAL on-route case
-    if (campCtx.type === "between") {
-        const dispDay = dayCtx.dayIndex + 1;
-        if (dispDay !== lastDay) {
-            panel.textContent = `Day ${dispDay}`;
-            lastDay = dispDay;
-        }
-        return;
-    }
-
-    // AT CAMP: show day transition (Day X → Day X+1)
     if (campCtx.type === "at") {
+        // at camp: show day transition (Day X → Day X+1)
         const d = dayCtx.dayIndex;
         panel.textContent = `Day ${d} → Day ${d + 1}`;
-        lastDay = d + 2;
+    } else {
+        panel.textContent = `Day ${dayCtx.dayIndex + 1}`;
     }
 }
-export function syncPanels(i) {
-    if (typeof i !== "number") {
-        i = hoverIndex;
-    }
-    const campCtx = getCampContext(i);
-    const dayCtx  = getDayContext(i);
+
+const coveredValue = document.getElementById('metric-covered');
+const climbedValue = document.getElementById('metric-climbed');
+
+function syncPanels() {
+    const campCtx = getCampContext(index);
+    const dayCtx  = getDayContext(index);
     syncCampPanel(campCtx);
     syncDayPanel(dayCtx, campCtx);
+
+    // live figures up to the current position (precomputed per point)
+    const p = smoothedData[index];
+    coveredValue.textContent = p.dist.toFixed(1);
+    climbedValue.textContent = Math.round(p.ascent);
 }
-
-//batching sync
-export function syncVisuals(source) {
-    const i = getHoverIndex();
-    if (typeof i !== "number" || i < 0) return;
-
-    const campCtx = getCampContext(i);
-
-    if (campCtx.type === "at") {
-        // At camp → neutral state
-        highlightDaySegment(null);
-    } else {
-        const day = getDayForIndex(i);
-        highlightDaySegment(day);
-    }
-
-
-
-    if (source !== HoverSource.CHART) {
-        syncChartHighlight();
-        syncPanels();
-        
-    }
-
-    if (source !== HoverSource.CAMP) {
-        
-        syncPanels(i);
-        syncHoverMapMarker(i);
-    }
-    }

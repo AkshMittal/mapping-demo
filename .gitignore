@@ -22,3 +22,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# viewshed precompute output (regenerate with tools/viewshed)
+data/
+public/viewshed/*
+# the route the live demo shows is committed
+!public/viewshed/patalsu/
+__pycache__/

@@ -4,19 +4,17 @@ from "./map-module.js";
 import { drawElevationChart } 
 from "./chart-module.js";
 
-import {setPlaying, setHoverIndex, getHoverIndex, setHoverMapMarker, setSmoothedData, getPlaying, HoverSource} 
+import { setPlaying, getPlaying, setIndex, getIndex, setHoverMapMarker, setSmoothedData, Source }
 from "./controller-module.js";
 
-import {setCampIndices,getCampIndices, setDayBounds, getDayBounds, getDayForIndex,} 
+import { setCampIndices, getCampIndices, setDayBounds, getDayBounds, getCamps }
 from "./itinerary-module.js";
 
-const campData = await fetch(
-    '/routes/hampta-pass/camps.json'
-  ).then(r => r.json());
-  
-  const trailhead = campData.trailhead;
-  const camps = campData.camps;
-  
+import { setInsetRoute }
+from "./inset-module.js";
+
+const camps = getCamps();
+
 
 let routeData = [];
 let routeBounds = null;
@@ -32,259 +30,92 @@ let hitboxLine = null;
 let lastHoverTime = 0;
 const HOVER_INTERVAL = 16; 
 
-//playback 
-const PlaybackState = {
-  IDLE: 'idle',
-  PLAYING: 'playing',
-  PAUSED: 'paused',
-  CAMP_PAUSE: 'camp_pause',
-  FINISHED: 'finished'
-};
-let playbackState = PlaybackState.IDLE;
-export function ensurePausedForUserHover() {
+// ─────────────────────────────────────────────
+// PLAYBACK
+// elapsed time → integer index. If a camp lies between the current index and
+// the next one, land exactly on it and stop. Button state is derived from the
+// index in controller-module, so nothing here tracks "state".
+// ─────────────────────────────────────────────
+const PLAY_DURATION = 24000; // ms for the full route
+let rafId = null;
+let startTime = 0;
+let startIndex = 0;
+
+function msPerPoint() {
+    return PLAY_DURATION / (smoothedData.length - 1);
+}
+
+function play() {
     if (getPlaying()) return;
-    if (playbackState !== PlaybackState.PAUSED) {
-      playbackState = PlaybackState.PAUSED;
-      btnPlay.dataset.state = playbackState;
-    }
-}
-  export function syncPlaybackStateToCampIfPaused() {
-    if (getPlaying()) return;
-
-    if (playbackState === PlaybackState.PAUSED) {
-        playbackState = PlaybackState.CAMP_PAUSE;
-        btnPlay.dataset.state = playbackState;
-    }
-}
-
-let playbackIndex = 0;
-function getPlaybackIndex() {
-    return playbackIndex;
-}  
-let playStartTime = null;
-let elapsedAccum = 0;
-let playDuration = 12000; // 12 seconds for full GPX
-let lastSyncedIndex = -1;
-let lastPausedCampIndex = null;
-export function setLastPausedCampIndex(index){
-    lastPausedCampIndex = index;
-}
-let campPauseEngaged = false;
-export function setCampPauseEngaged(bool){
-    campPauseEngaged = bool;
-}
-export function clearCampPause(){
-    campPauseEngaged = false;  
-    lastPausedCampIndex = null; 
-}
-function isCampPauseEngaged(){
-    return campPauseEngaged;
-}
-let fractionalIndex = 0;
-function syncPlaybackToHover() {
-    const i = getHoverIndex();
-    if (typeof i !== "number" || i < 0) return;
-
-    playbackIndex = i;
-    fractionalIndex = i;
-    lastSyncedIndex = i;
-    const N = smoothedData.length;
-    elapsedAccum = (fractionalIndex / (N - 1)) * playDuration;
-}
-let btnReset =document.getElementById('btn-reset');
-btnReset.addEventListener("click", () => {
-    if(getHoverIndex() === 0 ) return;
+    if (getIndex() >= smoothedData.length - 1) return; // finished
     maybeRecenterToRoute();
-    resetPlayback();
-});
-let btnPlay = document.getElementById('btn-play');
+    startIndex = getIndex();
+    startTime = performance.now();
+    setPlaying(true);
+    rafId = requestAnimationFrame(tick);
+}
+
+function pause() {
+    if (!getPlaying()) return;
+    cancelAnimationFrame(rafId);
+    setPlaying(false);
+}
+
+function reset() {
+    pause();
+    fitToRoute();
+    setIndex(0);
+}
+
+function tick(now) {
+    if (!getPlaying()) return;
+    const last = smoothedData.length - 1;
+    const current = getIndex();
+
+    const elapsed = Math.max(0, now - startTime);
+    let next = Math.min(startIndex + Math.floor(elapsed / msPerPoint()), last);
+    next = Math.max(next, current);
+
+    // first camp strictly ahead of current and reached by next
+    const camp = getCampIndices().find(ci => ci > current && ci <= next);
+    if (camp !== undefined) next = camp;
+
+    setIndex(next);
+
+    if (camp !== undefined || next >= last) {
+        setPlaying(false);
+        maybeRecenterToRoute();
+        return;
+    }
+    rafId = requestAnimationFrame(tick);
+}
+
+const btnPlay = document.getElementById('btn-play');
+const btnReset = document.getElementById('btn-reset');
+
 btnPlay.addEventListener("click", () => {
-    if (playbackState === PlaybackState.FINISHED) return;
-    maybeRecenterToRoute();
-    switch (playbackState) {
-        case PlaybackState.IDLE:
-            startPlayback();
-            btnPlay.dataset.state = playbackState;
-            break;
-
-        case PlaybackState.PLAYING:
-            pausePlayback();
-            btnPlay.dataset.state = playbackState;
-            break;
-        case PlaybackState.PAUSED:
-            startPlayback();
-            btnPlay.dataset.state = playbackState;
-        case PlaybackState.CAMP_PAUSE:
-        resumePlayback();
-        btnPlay.dataset.state = playbackState;
-
-        break;
-    }
+    if (getPlaying()) pause();
+    else play();
 });
+
+btnReset.addEventListener("click", () => {
+    if (getIndex() === 0 && !getPlaying()) return;
+    reset();
+});
+
 function disableMapInteraction(el) {
     if (!window.L) return;
     L.DomEvent.disableClickPropagation(el);
     L.DomEvent.disableScrollPropagation(el);
-  }
-  
-  disableMapInteraction(btnPlay);
-  disableMapInteraction(btnReset);
-  
-
-
-function startPlayback() {
-    if (getPlaying()) return;
-    playbackState = PlaybackState.PLAYING;    
-    syncPlaybackToHover();      // handoff 
-
-    campPauseEngaged = false;
-    setPlaying(true);
-    
-    const chart = window.elevationChart;
-    if (chart) chart.canvas.classList.add("chart-disabled");
-    chart.options.plugins.tooltip.enabled = false;
-    chart.update('none');
-    playStartTime = performance.now();
-    hoverMapMarker.setStyle({ opacity: 1, fillOpacity: 1 });
-
-    requestAnimationFrame(playbackLoop);
 }
 
-function resumePlayback() {
-    if (getPlaying()) return;
-    playbackState = PlaybackState.PLAYING;
-    playbackIndex = getHoverIndex();
-    campPauseEngaged = false;
-    const N = smoothedData.length;
-    elapsedAccum = (playbackIndex / (N - 1))* playDuration;
-    const chart = window.elevationChart;
-    if (chart) chart.canvas.classList.add("chart-disabled");
-    chart.options.plugins.tooltip.enabled = false;
-    chart.update('none');
-    setPlaying(true);
-    playStartTime = performance.now();
-
-    requestAnimationFrame(playbackLoop);
-    // console.log("playstartTime:",playStartTime,)
-}
-
-
-
-function pausePlayback() {
-    playbackState = PlaybackState.PAUSED;
-    if (!getPlaying()) return;
-    elapsedAccum += performance.now() - playStartTime;
-    setPlaying(false); 
-    // enable chart tooltip
-    const chart = window.elevationChart;
-    if (chart) {
-        chart.canvas.classList.remove("chart-disabled");
-        chart.options.plugins.tooltip.enabled = true;
-        chart.tooltip?.setActiveElements(
-            [{ datasetIndex: 0, index: getHoverIndex() }],
-            { x: 0, y: 0 }
-        );
-        chart.update();
-    }
-
-    
-    setHoverIndex(getPlaybackIndex(), HoverSource.PROGRAM);
-}
-
-function resetPlayback() {
-    playbackState = PlaybackState.IDLE;
-    btnPlay.dataset.state = playbackState; 
-    setPlaying(false);
-    const chart = window.elevationChart;
-    if (chart) {
-        chart.canvas.classList.remove("chart-disabled");
-    }
-    setHoverIndex(0, HoverSource.PROGRAM);
-    chart.tooltip?.setActiveElements(
-            [{ datasetIndex: 0, index: getHoverIndex() }],
-            { x: 0, y: 0 }
-        );
-    chart.update('none');
-    clearCampPause();
-    elapsedAccum = 0;
-    playStartTime = 0;
-    lastSyncedIndex = -1;
-}
-let counter = 0;
-function playbackLoop(now) {
-    if (!getPlaying()) {
-        // console.log("counter = ", counter);
-        return;
-    }
-    const elapsed = (getPlaying() ? performance.now() - playStartTime : 0) + elapsedAccum;
-    const N = smoothedData.length;
-    const buffer = playDuration / (N - 1); // time per point
-    // clamp so we don't go out of bounds
-    fractionalIndex = elapsed / buffer;
-    const i0 = Math.floor(fractionalIndex);
-    playbackIndex = i0;
-
-    const i1 = Math.min(i0 + 1, N - 1);
-
-    const p0 = smoothedData[i0];
-    const p1 = smoothedData[i1];
-
-    if (!p0 || !p1) {
-        console.warn("Playback index invalid:", i0, i1, "N:", N);
-        // console.log("counter = ", counter);
-        setPlaying(false);
-        return;
-    }
-
-    // how far between p0 and p1 are we?
-    const alpha = fractionalIndex - i0;  // 0 to <1
-
-    // --- LINEAR INTERPOLATION ---
-    const lat = p0.lat + (p1.lat - p0.lat) * alpha;
-    const lon = p0.lon + (p1.lon - p0.lon) * alpha;
-    // move marker smoothly
-    counter++;
-    hoverMapMarker.setLatLng([lat, lon]);
-    // RANGE-BASED CAMP DETECTION (no skips)
-    // console.log(
-    //     "loop:",
-    //     "frac", fractionalIndex.toFixed(2),
-    //     "i0", i0,
-    //     "playback", playbackIndex,
-    //     "lastSynced", lastSyncedIndex
-    // );
-
-    const hitCamp = getCampIndices().find(ci =>
-        Math.abs(ci - getPlaybackIndex()) <= 60 && ci !== lastPausedCampIndex
-    );
-
-
-    if (hitCamp !== undefined) {
-        lastPausedCampIndex = hitCamp;
-        pauseForCamp(hitCamp);
-        return;
-    }
-
-    lastSyncedIndex = i0;
-    if(playbackIndex !== lastPausedCampIndex){
-        setHoverIndex(getPlaybackIndex(),HoverSource.PROGRAM);
-    }
-    // continue or end
-    if (elapsed < playDuration) {
-        requestAnimationFrame(playbackLoop);
-    } else {
-        clearCampPause();
-        setPlaying(false);
-        playbackState = PlaybackState.FINISHED;
-        btnPlay.dataset.state = playbackState;
-        // console.log("ye this second thing happened");
-    }
-}
+disableMapInteraction(btnPlay);
+disableMapInteraction(btnReset);
 
 const campIcon = L.icon({
-    iconUrl: '/resources/images/camp-icon.png',
-    iconSize: [60, 60],
-    iconAnchor: [30, 30],
+    iconUrl: 'public/resources/images/camp-icon.png',
+    iconSize: [30, 30],
+    iconAnchor: [15, 15],
     popupAnchor: [0, 0]
 });
 
@@ -293,13 +124,30 @@ const campMarkers = new Map();
 export function getCampMarkers(){
     return campMarkers;
 }
-function applyCamps(smoothedData) {
-    const totalKm = camps[camps.length - 1].distKm;
+// camp with lat/lon → nearest route point; otherwise place by distKm as a share
+// of the last camp's distKm (older camps.json where the last camp is the end)
+function campIndexFor(camp, smoothedData) {
     const N = smoothedData.length;
+    if (typeof camp.lat === 'number' && typeof camp.lon === 'number') {
+        const k = Math.cos(camp.lat * Math.PI / 180);
+        let best = 0;
+        let bestD = Infinity;
+        smoothedData.forEach((p, i) => {
+            const d = (p.lat - camp.lat) ** 2 + ((p.lon - camp.lon) * k) ** 2;
+            if (d < bestD) {
+                bestD = d;
+                best = i;
+            }
+        });
+        return best;
+    }
+    const totalKm = camps[camps.length - 1].distKm;
+    return Math.round((camp.distKm / totalKm) * (N - 1));
+}
 
+function applyCamps(smoothedData) {
     let campIndices = camps.map(camp => {
-        const proportion = camp.distKm / totalKm;
-        const index = Math.round(proportion * (N - 1));
+        const index = campIndexFor(camp, smoothedData);
         camp.index = index;
         camp.lat = smoothedData[index].lat;
         camp.lon = smoothedData[index].lon;
@@ -307,7 +155,7 @@ function applyCamps(smoothedData) {
         return index;
     });
 
-    // Day bounds = [start, camp1, camp2, camp3, end]
+    // Day starts = [start, camp1, camp2, ...]; the last day runs to the route end
     let dayBounds = [0, ...campIndices];
     setDayBounds(dayBounds);
     setCampIndices(campIndices);
@@ -340,42 +188,6 @@ function renderCampMarkers(map) {
 }
   
 
-function pauseForCamp(campIndex) {
-    campMarkers.get(campIndex)?.openTooltip();
-
-    playbackState = PlaybackState.CAMP_PAUSE;
-    btnPlay.dataset.state = playbackState;
-    maybeRecenterToRoute();    
-    campPauseEngaged = true;
-    setPlaying(false);
-    lastSyncedIndex = campIndex;
-    // console.log("campIndex:", campIndex, "playbackIndex:", getPlaybackIndex(), "hoverIndex:", getHoverIndex())
-    
-    // snap marker info
-    const camp = smoothedData[campIndex];
-    if (camp) {
-        hoverMapMarker.setLatLng([camp.lat, camp.lon]);
-    }
-    const isLastCamp = campIndex === getCampIndices().at(-1);
-
-    if (isLastCamp) {
-        playbackState = PlaybackState.FINISHED;
-        btnPlay.dataset.state = playbackState;
-    }
-    setHoverIndex(campIndex, HoverSource.CAMP);
-    playbackIndex = campIndex;
-
-    const chart = window.elevationChart;
-    if (chart){
-        chart.canvas.classList.remove("chart-disabled");
-        chart.options.plugins.tooltip.enabled = true;
-        chart.tooltip?.setActiveElements(
-            [{ datasetIndex: 0, index: campIndex }],
-            { x: 0, y: 0 }
-        );
-        chart.update('none');
-    }
-}
 
 
 
@@ -386,22 +198,15 @@ getMap().getPane('hoverMarkerPane').style.zIndex = 700;
 getMap().createPane('hitboxLinePane');
 getMap().getPane('hitboxLinePane').style.zIndex = 600;
 
-const startIconLarge = L.icon({
-    iconUrl: "https://unpkg.com/leaflet-gpx@1.7.0/pin-icon-start.png",
-    shadowUrl: "https://unpkg.com/leaflet-gpx@1.7.0/pin-shadow.png",
-    iconSize: [32, 52],     // larger start icon
-    iconAnchor: [16, 52],
-    shadowSize: [40, 40],
-    pane: "markerPane"
+// start / end dots in the page palette (styled by .route-pin in style.css)
+const startIcon = L.divIcon({
+    className: 'route-pin start',
+    iconSize: [14, 14]
 });
 
-const endIconNormal = L.icon({
-    iconUrl: "https://unpkg.com/leaflet-gpx@1.7.0/pin-icon-end.png",
-    shadowUrl: "https://unpkg.com/leaflet-gpx@1.7.0/pin-shadow.png",
-    iconSize: [24, 40],     // normal size
-    iconAnchor: [12, 40],
-    shadowSize: [32, 32],
-    pane: "endMarkerPane"
+const endIcon = L.divIcon({
+    className: 'route-pin end',
+    iconSize: [14, 14]
 });
 
 
@@ -421,14 +226,13 @@ function isHoverMarkerInView() {
     if (!hoverMapMarker) return true;
     return getMap().getBounds().contains(hoverMapMarker.getLatLng());
 }
-function maybeRecenterToRoute() {
-    if (!routeBounds) return;
+// the main map's load view: the route with some room around it
+function fitToRoute() {
+    if (routeBounds) getMap().fitBounds(routeBounds, { padding: [40, 40] });
+}
 
-    if (!isHoverMarkerInView()) {
-        getMap().fitBounds(routeBounds, {
-            padding: [40, 40]
-        });
-    }
+function maybeRecenterToRoute() {
+    if (!isHoverMarkerInView()) fitToRoute();
 }
 
 
@@ -483,7 +287,7 @@ function pickWindowSize(N) {
 } 
 
 
-function processPointsAndAttach(points, layer) {
+function processPointsAndAttach(points) {
     if (!points || points.length === 0) {
         console.warn('No track points to process.');
         return;
@@ -535,17 +339,19 @@ function processPointsAndAttach(points, layer) {
     }
     
     hitboxLine.on('mousemove', function (evt) {
-        ensurePausedForUserHover();
-        if(isMapPanning()) return;
+        if (getPlaying() || isMapPanning() || !smoothedData.length) return;
         const now = performance.now();
-        if (now - lastHoverTime < HOVER_INTERVAL) return; 
+        if (now - lastHoverTime < HOVER_INTERVAL) return;
         lastHoverTime = now;
-        lastPausedCampIndex = null;
-        if (!smoothedData.length || isMapPanning()) return;
-        let nearestIndex = findNearestRoutePoint(evt.latlng);
-        setHoverIndex(nearestIndex, HoverSource.MAP);
+        setIndex(findNearestRoutePoint(evt.latlng), Source.MAP);
     });
-    
+
+    // touch screens have no hover: a tap on the route moves there instead
+    hitboxLine.on('click', function (evt) {
+        if (getPlaying() || !smoothedData.length) return;
+        setIndex(findNearestRoutePoint(evt.latlng), Source.MAP);
+    });
+
     try {
         drawElevationChart(smoothedData);
     } catch (err) {
@@ -556,7 +362,7 @@ function processPointsAndAttach(points, layer) {
     } catch (err) {
         console.error('Failed to compute metrics:', err);
     }
-    setHoverIndex(0, HoverSource.PROGRAM);
+    setIndex(0);
     hoverMapMarker.setStyle({opacity:1, fillOpacity:1});
 
 }
@@ -618,7 +424,7 @@ function smoothData(routeData, window = 5) {
         result.push({
             lat,
             lon,
-            ele: ele.toFixed(0),
+            ele: Math.round(ele),
             dist: cumDist,
             ascent: cumAscent,
             slope: null,   // placeholder for forward slope
@@ -693,11 +499,12 @@ function drawSmoothedPolyline(map, smoothData, options = {}) {
     const latlngs = smoothData.map(p => [p.lat, p.lon]);
 
     // draw polyline
-    const bounds = getDayBounds();   // e.g. [0, 532, 1140, 1802]
+    const bounds = getDayBounds();   // day starts, e.g. [0, 532, 1140]
     routeSegments = [];
-    for (let d = 0; d < bounds.length - 1; d++) {
+    for (let d = 0; d < bounds.length; d++) {
         const i0 = bounds[d];
-        const i1 = bounds[d+1];
+        const i1 = bounds[d + 1] ?? latlngs.length - 1;
+        if (i1 <= i0) continue; // last camp is the route end: no extra day
         const segLatLngs = latlngs.slice(i0, i1 + 1); // inclusive slice
 
         const segOutline = L.polyline(segLatLngs, {
@@ -727,14 +534,15 @@ function drawSmoothedPolyline(map, smoothData, options = {}) {
         });
 
     }
-    const start = L.marker(latlngs[0], { icon: startIconLarge }).addTo(map);
-    const end   = L.marker(latlngs[latlngs.length - 1], { icon: endIconNormal }).addTo(map);
+    const start = L.marker(latlngs[0], { icon: startIcon, interactive: false }).addTo(map);
+    const end   = L.marker(latlngs[latlngs.length - 1], { icon: endIcon, interactive: false, pane: "endMarkerPane" }).addTo(map);
 
     // draw hitbox line 
     hitboxLine = L.polyline(latlngs, HitboxStyle).addTo(map);
-    // fit bounds to route
+    // main map frames the route; the inset shows the full viewshed extent
     routeBounds = L.latLngBounds(latlngs);
-    map.fitBounds(latlngs);
+    fitToRoute();
+    setInsetRoute(smoothData);
 
 
 
@@ -756,83 +564,15 @@ function findNearestRoutePoint(latlng){
 }
 
 
-export function loadGPX(gpxPath) { 
-     if (!window.L || !L.GPX) {
-        console.error('Leaflet or leaflet-gpx plugin is not loaded.');
-        return;
-    }
-
-    const gpx = new L.GPX(gpxPath, {
-        async: true,
-        polyline_options: { color: "#ff7700ff", weight: 4, opacity: 1},
-        marker_options: {
-            startIcon: '',
-            startIconUrl: '',
-            endIconUrl: '',
-            endIcon: '',
-            shadowUrl: ''
-        }
-
-    })
-    .on('loaded', async function (e) {
-
-        function findPolyline(layer) {
-            if (layer instanceof L.Polyline) {
-                return layer;
-            }
-
-            if (layer.getLayers) {
-                const children = layer.getLayers();
-                for (const child of children) {
-                    const found = findPolyline(child);
-                    if (found) return found;
-                }
-            }
-
-            if (layer._layers) {
-                for (let key in layer._layers) {
-                    const found = findPolyline(layer._layers[key]);
-                    if (found) return found;
-                }
-            }
-
-            return null;
-        }
-        const rawPolyline = findPolyline(e.target);
-
-        if (!rawPolyline) {
-            console.error("No polyline found anywhere inside GPX layer.");
-            console.log(e.target);
-            return;
-        }
-        else {
-            getMap().removeLayer(rawPolyline);
-        }
-
-
-        const xmlOrString = e.target._gpx;
-        const xmlDoc = (typeof xmlOrString === 'string') ? new DOMParser().parseFromString(xmlOrString, 'text/xml') : xmlOrString;
-
-        let trkpts = findTrkpts(xmlDoc);
-        if (!trkpts || trkpts.length === 0) {
-            console.warn('No trkpt found from plugin XML. Falling back to fetch:', gpxPath);
-            fetch(gpxPath).then(r => {
-                if (!r.ok) throw new Error('GPX fetch failed: ' + r.status);
-                return r.text();
-            }).then(text => {
-                const parsed = new DOMParser().parseFromString(text, 'text/xml');
-                trkpts = findTrkpts(parsed);
-                processPointsAndAttach(trkpts, e.target);
-                // console.log("smoothedData length: ", smoothedData.length);
-                // console.log("hovermapMarker: ", hoverMapMarker);   
-            }).catch(err => console.error('GPX fetch fallback failed:', err));
-            return;
-        }
-    
-
-
-
-    }).addTo(getMap());
-    
-
+export function loadGPX(gpxPath) {
+    fetch(gpxPath)
+        .then(r => {
+            if (!r.ok) throw new Error('GPX fetch failed: ' + r.status);
+            return r.text();
+        })
+        .then(text => {
+            const doc = new DOMParser().parseFromString(text, 'text/xml');
+            processPointsAndAttach(findTrkpts(doc));
+        })
+        .catch(err => console.error('GPX load failed:', err));
 }

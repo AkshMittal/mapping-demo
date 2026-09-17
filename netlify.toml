@@ -1,0 +1,18 @@
+# Static site, no framework build. The command only copies what the page
+# needs into dist/, so tools/, source GPX files and docs are not published.
+[build]
+  publish = "dist"
+  command = """
+    rm -rf dist &&
+    mkdir -p dist/public &&
+    cp -r index.html src dist/ &&
+    cp -r public/resources public/routes public/viewshed dist/public/ &&
+    find dist/public/routes -name '*.source.gpx' -delete &&
+    find dist/public/routes -name '*.orig.gpx' -delete
+  """
+
+# masks and route data only change on redeploy; let browsers keep them a day
+[[headers]]
+  for = "/public/*"
+  [headers.values]
+    Cache-Control = "public, max-age=86400"
