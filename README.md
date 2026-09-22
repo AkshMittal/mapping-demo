@@ -1,9 +1,9 @@
-# mapping-demo — viewshed edition
+# mapping-demo 
 
 An interactive trek route viewer — the kind of thing a trek page would embed
 instead of a static image and a paragraph of text. Built as a commercial demo.
 
-This repo is the second pass on the original mapping-demo: the foundation got
+This repo recieved a second pass: the foundation got
 fixed, and the viewer now shows **what you can actually see from the trail** as
 the marker moves.
 
