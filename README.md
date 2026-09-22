@@ -7,8 +7,8 @@ This repo is the second pass on the original mapping-demo: the foundation got
 fixed, and the viewer now shows **what you can actually see from the trail** as
 the marker moves.
 
-**Original version:** https://www.trekmaps.in/
-**Build writeup (original):** [Raw write-up of a demo I built while extending RidgeView](https://medium.com/@akshmittal/raw-write-up-of-a-demo-i-built-while-extending-ridgeview-6d7679a2cbfe)
+**Demo (try it yourself):** https://chipper-douhua-f18e7c.netlify.app/
+**Build writeup (original - does not include viewshed extenstion and clean up):** [Raw write-up of a demo I built while extending RidgeView](https://medium.com/@akshmittal/raw-write-up-of-a-demo-i-built-while-extending-ridgeview-6d7679a2cbfe)
 
 An extension of [RidgeView](https://github.com/AkshMittal/RidgeView). I pulled
 out only what I needed — the map, the chart, some sync logic — and left the
